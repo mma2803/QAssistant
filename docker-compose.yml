@@ -1,0 +1,54 @@
+# Local development emulators (TECHNICAL_CHOICES D28).
+# Postgres + Firebase Auth emulator + fake-gcs-server. No prod credentials here.
+# Start with: npm run dev:infra  (docker compose up -d)
+services:
+  postgres:
+    image: postgres:16
+    container_name: qassistant-postgres
+    environment:
+      POSTGRES_USER: ${DB_BOOTSTRAP_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-qassistant}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Bootstraps the app_user / app_superadmin / app_migrator roles before the
+      # app or migrations connect. Runs only on a fresh volume.
+      - ./infra/local/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_BOOTSTRAP_USER:-postgres} -d ${DB_NAME:-qassistant}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Identity Platform / Firebase Auth emulator. Exposes the auth REST surface
+  # that firebase-admin verifyIdToken / user management hit when
+  # FIREBASE_AUTH_EMULATOR_HOST points here.
+  firebase-auth:
+    image: andreysenov/firebase-tools:latest
+    container_name: qassistant-firebase-auth
+    command: >
+      firebase emulators:start
+      --only auth
+      --project ${FIREBASE_PROJECT_ID:-main-nima}
+    ports:
+      - "9099:9099"
+      - "4000:4000"
+    volumes:
+      - ./infra/local/firebase.json:/home/node/firebase.json:ro
+
+  # GCS emulator. The Storage client + V4 signer target this when
+  # STORAGE_EMULATOR_HOST points here.
+  fake-gcs:
+    image: fsouza/fake-gcs-server:latest
+    container_name: qassistant-fake-gcs
+    command: ["-scheme", "http", "-port", "4443", "-public-host", "127.0.0.1:4443"]
+    ports:
+      - "4443:4443"
+    volumes:
+      - gcsdata:/storage
+
+volumes:
+  pgdata:
+  gcsdata:

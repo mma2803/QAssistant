@@ -1,0 +1,24 @@
+{
+  "name": "@qassistant/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QAssistant Chrome MV3 capture extension (Vite + CRXJS + rrweb). DOM-replay capture, optional screenshots, flag hotkey, scoped GCS upload.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@qassistant/shared": "*",
+    "rrweb": "^2.0.0-alpha.18",
+    "uuidv7": "^1.0.2"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.26",
+    "@types/chrome": "^0.0.287",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.9"
+  }
+}

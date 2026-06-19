@@ -1,0 +1,35 @@
+schema: spec-driven
+
+context: |
+  QAssistant is a planning-first greenfield SaaS. Do not start application
+  implementation until the MVP decisions in design.md are resolved.
+
+  Product shape:
+  - Multi-tenant QA capture platform.
+  - Chrome MV3 extension records manual QA sessions.
+  - Backend verifies identity, stores session metadata/artifacts, validates Jira,
+    and orchestrates code generation.
+  - Dashboard provides role-scoped visibility.
+  - Infrastructure target is GCP managed services deployed by Terraform.
+
+  Planning bias:
+  - Challenge broad claims before implementation.
+  - Prefer explicit architecture decisions over vague requirements.
+  - Keep implementation checkpointed as a vertical slice before expanding
+    analytics, ranking, or advanced code generation.
+
+rules:
+  proposal:
+    - Include non-goals and explicitly separate MVP from later phases.
+    - Call out security, privacy, data retention, and integration assumptions.
+  design:
+    - Maintain an "MVP Decision Questions" section for choices the owner must make.
+    - Do not treat unresolved choices as decided architecture.
+    - Include datastore, data model, API contract, privacy, observability, and deployment assumptions.
+  specs:
+    - Requirements must be testable and include negative/access-control scenarios where relevant.
+    - Avoid claiming exact analytics such as "not tested" unless the ground truth source is defined.
+  tasks:
+    - Add decision checkpoints before implementation work.
+    - Break tasks into chunks small enough to verify independently.
+    - Include documentation and verification tasks for privacy, security, and tenant isolation.

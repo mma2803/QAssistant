@@ -1,0 +1,33 @@
+{
+  "name": "qassistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QAssistant: multi-tenant QA capture and codegen SaaS (monorepo root).",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:infra": "docker compose up -d",
+    "dev:infra:down": "docker compose down",
+    "db:generate": "npm run db:generate --workspace apps/api",
+    "db:migrate": "npm run db:migrate --workspace apps/api",
+    "test:e2e": "npm run test:e2e:infra && npm run test:e2e:browser && npm run test:e2e:api && npm run e2e:coverage",
+    "test:e2e:infra": "docker compose up -d --wait",
+    "test:e2e:browser": "playwright test",
+    "test:e2e:api": "REQUIRE_E2E_INFRA=true npm test --workspace @qassistant/api",
+    "e2e:coverage": "node scripts/generate-e2e-coverage.mjs",
+    "test:e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

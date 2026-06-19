@@ -1,0 +1,47 @@
+{
+  "targetPercent": 80,
+  "granularity": {
+    "multiplier": 3,
+    "baseline": {
+      "browser": 12,
+      "http": 1,
+      "service": 9,
+      "rls": 8
+    }
+  },
+  "screens": [
+    { "surface": "Dashboard", "screen": "Sign in", "evidence": "e2e/auth.spec.ts", "openspec": "identity-and-tenancy: Tenant user signs in with email and password" },
+    { "surface": "Dashboard", "screen": "Forced password change", "evidence": "e2e/auth.spec.ts", "openspec": "identity-and-tenancy: First login forces password change" },
+    { "surface": "Dashboard", "screen": "Recordings", "evidence": "e2e/dashboard.spec.ts", "openspec": "qa-dashboards: Browse recordings and artifacts" },
+    { "surface": "Dashboard", "screen": "Recording detail", "evidence": "e2e/session-detail.spec.ts", "openspec": "qa-dashboards: Admin recording and artifact view" },
+    { "surface": "Dashboard", "screen": "Project context", "evidence": "e2e/dashboard.spec.ts", "openspec": "qa-dashboards: View project context" },
+    { "surface": "Dashboard", "screen": "Productivity and ranking", "evidence": "e2e/dashboard.spec.ts", "openspec": "qa-dashboards: Productivity metrics and ranking" },
+    { "surface": "Dashboard", "screen": "User management", "evidence": "e2e/users.spec.ts", "openspec": "identity-and-tenancy: In-dashboard user management via Admin SDK" },
+    { "surface": "Extension popup", "screen": "Sign in", "evidence": "e2e/extension-popup.spec.ts", "openspec": "identity-and-tenancy: Tenant user signs in with email and password" },
+    { "surface": "Extension popup", "screen": "Forced password change", "evidence": "e2e/extension-popup.spec.ts", "openspec": "identity-and-tenancy: First login forces password change" },
+    { "surface": "Extension popup", "screen": "Session start", "evidence": "e2e/extension-popup.spec.ts", "openspec": "session-capture: Work-context-gated session start" },
+    { "surface": "Extension popup", "screen": "Active recording", "evidence": "e2e/extension-popup.spec.ts", "openspec": "session-capture: Tester explicitly stops a session" },
+    { "surface": "Extension popup", "screen": "Super-admin capture denial", "evidence": "e2e/extension-popup.spec.ts", "openspec": "identity-and-tenancy: Super-admin carries no tenant" }
+  ],
+  "traceability": [
+    { "spec": "identity-and-tenancy", "requirement": "Multi-tenant identity model", "evidence": "apps/api/test/rls-isolation.test.ts; apps/api/test/http-e2e.test.ts" },
+    { "spec": "identity-and-tenancy", "requirement": "Three-level provisioning", "evidence": "apps/api/test/http-e2e.test.ts; e2e/users.spec.ts" },
+    { "spec": "identity-and-tenancy", "requirement": "Email and password authentication", "evidence": "apps/api/test/http-e2e.test.ts; e2e/auth.spec.ts; e2e/extension-popup.spec.ts" },
+    { "spec": "identity-and-tenancy", "requirement": "Forced password change on first login and after reset", "evidence": "apps/api/test/http-e2e.test.ts; e2e/auth.spec.ts; e2e/extension-popup.spec.ts" },
+    { "spec": "identity-and-tenancy", "requirement": "Custom-claim authorization enforced server-side", "evidence": "apps/api/test/http-e2e.test.ts" },
+    { "spec": "session-capture", "requirement": "Work-context-gated session start", "evidence": "apps/api/test/http-e2e.test.ts; e2e/extension-popup.spec.ts" },
+    { "spec": "session-capture", "requirement": "DOM-replay capture with optional viewport-only screenshots", "evidence": "apps/api/test/http-e2e.test.ts; apps/api/test/e2e-flow.test.ts" },
+    { "spec": "session-capture", "requirement": "Server-derived identity stamping", "evidence": "apps/api/test/http-e2e.test.ts; apps/api/test/e2e-flow.test.ts" },
+    { "spec": "session-capture", "requirement": "Hotkey to flag important state", "evidence": "apps/api/test/http-e2e.test.ts; e2e/extension-popup.spec.ts" },
+    { "spec": "session-capture", "requirement": "Artifact upload to GCS", "evidence": "apps/api/test/http-e2e.test.ts" },
+    { "spec": "knowledge-and-codegen", "requirement": "Per-project knowledge hub", "evidence": "apps/api/test/http-e2e.test.ts; e2e/dashboard.spec.ts" },
+    { "spec": "knowledge-and-codegen", "requirement": "Gemini model routing", "evidence": "apps/api/test/http-e2e.test.ts; apps/api/test/e2e-flow.test.ts" },
+    { "spec": "knowledge-and-codegen", "requirement": "Context-grounded Playwright generation", "evidence": "apps/api/test/http-e2e.test.ts; apps/api/test/e2e-flow.test.ts; e2e/session-detail.spec.ts" },
+    { "spec": "knowledge-and-codegen", "requirement": "Codegen safety and review", "evidence": "apps/api/test/http-e2e.test.ts; e2e/session-detail.spec.ts" },
+    { "spec": "knowledge-and-codegen", "requirement": "Comment and regenerate", "evidence": "apps/api/test/http-e2e.test.ts; e2e/session-detail.spec.ts" },
+    { "spec": "qa-dashboards", "requirement": "Role-scoped dashboard access", "evidence": "apps/api/test/http-e2e.test.ts; e2e/dashboard.spec.ts" },
+    { "spec": "qa-dashboards", "requirement": "Admin recording and artifact view", "evidence": "apps/api/test/http-e2e.test.ts; e2e/session-detail.spec.ts" },
+    { "spec": "qa-dashboards", "requirement": "Productivity metrics and ranking", "evidence": "apps/api/test/http-e2e.test.ts; e2e/dashboard.spec.ts" },
+    { "spec": "qa-dashboards", "requirement": "Per-project context section", "evidence": "apps/api/test/http-e2e.test.ts; e2e/dashboard.spec.ts" }
+  ]
+}

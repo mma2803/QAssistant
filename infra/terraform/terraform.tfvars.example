@@ -1,0 +1,41 @@
+# Copy to terraform.tfvars and fill in. bootstrap-gcp.sh generates a starter
+# version of this file for you.
+
+# Required.
+project_id = "my-gcp-project-id"
+
+# Region (EU default for GDPR posture).
+region = "europe-west1"
+
+# Optional naming prefix (lets multiple envs share a project).
+name_prefix = "qassistant"
+
+# --- Cloud SQL ------------------------------------------------------------
+db_tier                = "db-custom-1-3840"
+db_version             = "POSTGRES_16"
+db_availability_type   = "ZONAL"
+db_deletion_protection = true
+
+# --- Cloud Run ------------------------------------------------------------
+# Leave app_image as the default placeholder for the first apply; CI/CD sets
+# the real image afterwards (terraform ignores image drift).
+# app_image                 = "europe-west1-docker.pkg.dev/my-gcp-project-id/qassistant-app/app:latest"
+app_min_instances         = 0
+app_max_instances         = 4
+app_allow_unauthenticated = true
+
+# --- Identity Platform ----------------------------------------------------
+# Add your dashboard domain(s) for redirect/authorized origins.
+identity_authorized_domains = ["localhost"]
+# Optional GCIP tenants to seed for testing (normally created at runtime):
+identity_tenants = []
+
+# --- Secret Manager -------------------------------------------------------
+# Recommended: leave empty and add the Gemini key version out of band:
+#   echo -n "<key>" | gcloud secrets versions add qassistant-gemini-api-key --data-file=-
+gemini_api_key = ""
+
+# --- GitHub Actions WIF (D28) ---------------------------------------------
+# Set to enable keyless CI/CD. Leave empty to skip WIF resources.
+github_repository     = ""
+github_default_branch = "main"

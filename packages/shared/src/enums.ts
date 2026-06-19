@@ -1,0 +1,60 @@
+/**
+ * Enum value reference. Single source of truth for every `text` + `CHECK`
+ * enum in the data-model contract (section 2). The API encodes these as
+ * Postgres CHECK constraints; the dashboard and extension import the same
+ * constant arrays. Each enum exposes:
+ *   - a `const` tuple of allowed values (for zod `z.enum` and CHECK generation),
+ *   - an inferred union type.
+ */
+
+export const ROLES = ['admin', 'qa-engineer'] as const;
+export type Role = (typeof ROLES)[number];
+
+/** All token roles including the project-level super-admin (not stored in tenant_users). */
+export const TOKEN_ROLES = ['admin', 'qa-engineer', 'super-admin'] as const;
+export type TokenRole = (typeof TOKEN_ROLES)[number];
+
+export const TENANT_STATUSES = ['active', 'inactive'] as const;
+export type TenantStatus = (typeof TENANT_STATUSES)[number];
+
+export const USER_STATUSES = ['active', 'disabled'] as const;
+export type UserStatus = (typeof USER_STATUSES)[number];
+
+export const PROJECT_STATUSES = ['active', 'inactive'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const JIRA_STATUSES = ['active', 'inactive'] as const;
+export type JiraStatus = (typeof JIRA_STATUSES)[number];
+
+export const SESSION_STATUSES = ['active', 'completed'] as const;
+export type SessionStatus = (typeof SESSION_STATUSES)[number];
+
+export const SESSION_CLOSE_REASONS = ['stopped', 'inactivity'] as const;
+export type SessionCloseReason = (typeof SESSION_CLOSE_REASONS)[number];
+
+export const ARTIFACT_TYPES = ['dom_chunk', 'screenshot'] as const;
+export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
+
+export const COMPRESSIONS = ['none', 'gzip'] as const;
+export type Compression = (typeof COMPRESSIONS)[number];
+
+export const GENERATED_TEST_KINDS = ['playwright_test', 'replay_script'] as const;
+export type GeneratedTestKind = (typeof GENERATED_TEST_KINDS)[number];
+
+export const MODEL_TIERS = ['flash', 'pro'] as const;
+export type ModelTier = (typeof MODEL_TIERS)[number];
+
+export const REVIEW_STATUSES = ['draft', 'approved'] as const;
+export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+
+/** Standard error envelope codes used across the REST surface (contract section 4). */
+export const ERROR_CODES = [
+  'unauthenticated',
+  'forbidden',
+  'not_found',
+  'validation_failed',
+  'jira_validation_failed',
+  'must_change_password',
+  'conflict',
+] as const;
+export type ErrorCode = (typeof ERROR_CODES)[number];

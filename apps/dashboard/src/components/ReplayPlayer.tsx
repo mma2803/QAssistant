@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+// rrweb-player renders unstyled without its stylesheet: the controller is dead
+// (play works once at most) and the replay iframe has no sizing/clipping/scale,
+// so the captured page overflows and covers the dashboard. Import is required.
+import 'rrweb-player/dist/style.css';
 
 /**
  * rrweb DOM-replay player (spec 5.2 "rrweb-player replay of DOM-replay").

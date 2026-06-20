@@ -23,4 +23,12 @@ export default defineConfig({
       },
     },
   },
+  // Force ASCII output so non-ASCII string literals are emitted as \uXXXX escapes
+  // rather than raw bytes. rrweb embeds the U+FFFE noncharacter (a CSS BOM check)
+  // as a literal; Chrome's content-script loader (IsStringUTF8) rejects Unicode
+  // noncharacters and refuses the whole extension ("file is not UTF-8 encoded").
+  // charset:'ascii' escapes them, keeping every emitted chunk loadable.
+  esbuild: {
+    charset: 'ascii',
+  },
 });

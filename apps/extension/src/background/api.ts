@@ -105,14 +105,15 @@ export function getUploadUrls(
   sessionId: string,
   items: { type: 'dom_chunk' | 'screenshot'; seq: number }[],
 ): Promise<UploadUrlsResponse> {
-  // The contract models /upload-urls as GET; items travel in the querystring as
-  // repeated type/seq pairs the backend zips back together.
+  // The contract models /upload-urls as GET with an `items` array (zod:
+  // uploadUrlsRequestSchema). In the querystring that array uses qs bracket
+  // notation — items[i][type] / items[i][seq] — which the backend parses back
+  // into [{type, seq}]. Flat keys (type0/seq0) are NOT reassembled server-side.
   const query: Record<string, string> = {};
   items.forEach((it, i) => {
-    query[`type${i}`] = it.type;
-    query[`seq${i}`] = String(it.seq);
+    query[`items[${i}][type]`] = it.type;
+    query[`items[${i}][seq]`] = String(it.seq);
   });
-  query.count = String(items.length);
   return request<UploadUrlsResponse>(`/sessions/${sessionId}/upload-urls`, { query });
 }
 

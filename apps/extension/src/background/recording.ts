@@ -341,3 +341,27 @@ export async function rehydrate(projectLookup: (id: string) => Promise<Project |
   });
   startTimers(persisted);
 }
+
+/**
+ * Re-arm capture on a page that just (re)loaded mid-session. A full-page
+ * navigation tears down the in-page recorder (new document => fresh content
+ * script with no rrweb instance and activeSessionId=null), which silently stops
+ * DOM capture and disables the flag hotkey on the new URL. rehydrate() alone is
+ * not enough: when the service worker is still warm (capture timers keep it
+ * alive) `runtime` is already set, so rehydrate short-circuits and never re-sends
+ * recorder:start to the new document. So: ensure the runtime exists (no-op when
+ * warm, no duplicate timers), then ALWAYS re-issue recorder:start so the new page
+ * starts a fresh rrweb snapshot and re-binds the session id for flags.
+ */
+export async function resumeOnNavigation(
+  projectLookup: (id: string) => Promise<Project | null>,
+): Promise<void> {
+  await rehydrate(projectLookup);
+  if (!runtime) return;
+  await commandRecorder({
+    type: 'recorder:start',
+    sessionId: runtime.session.id,
+    startedAtIso: runtime.session.startedAt,
+    masking: maskingFor(runtime.project),
+  });
+}

@@ -97,8 +97,10 @@ export function SessionDetailPage(): JSX.Element {
           <div className="shots">
             {screenshots.map((s) => (
               <div key={s.id}>
-                <div className="muted">#{s.seq}</div>
-                <AuthImage sessionId={sessionId} artifactId={s.id} alt={`screenshot ${s.seq}`} />
+                {/* seq is 0-based in storage; show a 1-based label so it reads
+                    naturally and matches the popup's screenshot count. */}
+                <div className="muted">#{s.seq + 1}</div>
+                <AuthImage sessionId={sessionId} artifactId={s.id} alt={`screenshot ${s.seq + 1}`} />
               </div>
             ))}
           </div>

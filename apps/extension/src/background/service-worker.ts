@@ -183,8 +183,10 @@ async function handleContent(ev: ContentEvent): Promise<void> {
       await recording.noteActivity(ev.sessionId);
       break;
     case 'content:ready':
-      // A page (re)loaded mid-session; resume recording there.
-      await recording.rehydrate(projectLookup);
+      // A page (re)loaded mid-session (e.g. a full-page navigation); re-arm the
+      // new document so DOM capture and the flag hotkey keep working on the new
+      // URL. rehydrate() alone short-circuits when the worker is still warm.
+      await recording.resumeOnNavigation(projectLookup);
       break;
   }
 }

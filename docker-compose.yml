@@ -28,15 +28,21 @@ services:
   firebase-auth:
     image: andreysenov/firebase-tools:latest
     container_name: qassistant-firebase-auth
+    # --import/--export-on-exit persist the emulator's auth accounts to /data so
+    # admins/qa-engineers survive a container restart (DB already persists via
+    # pgdata; without this the auth side resets and logins break). BUG-008.
     command: >
       firebase emulators:start
       --only auth
       --project ${FIREBASE_PROJECT_ID:-main-nima}
+      --import=/data
+      --export-on-exit=/data
     ports:
       - "9099:9099"
       - "4000:4000"
     volumes:
       - ./infra/local/firebase.json:/home/node/firebase.json:ro
+      - authdata:/data
 
   # GCS emulator. The Storage client + V4 signer target this when
   # STORAGE_EMULATOR_HOST points here.
@@ -52,3 +58,4 @@ services:
 volumes:
   pgdata:
   gcsdata:
+  authdata:

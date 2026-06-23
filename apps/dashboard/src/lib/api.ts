@@ -13,6 +13,7 @@ import type {
   GenerationComment,
   JobResponse,
   CreateProjectRequest,
+  SetKnowledgeRequest,
   CreateUserRequest,
   UpdateUserRequest,
   ResetPasswordRequest,
@@ -138,6 +139,8 @@ export const api = {
   listProjects: () => request<Project[]>('GET', '/projects'),
   getProject: (projectId: string) => request<Project>('GET', `/projects/${projectId}`),
   createProject: (body: CreateProjectRequest) => request<Project>('POST', '/projects', body),
+  setKnowledge: (projectId: string, body: SetKnowledgeRequest) =>
+    request<Project>('PUT', `/projects/${projectId}/knowledge`, body),
 
   // --- dashboard reads (4.7) ---
   listSessions: (q: Partial<DashboardSessionsQuery> = {}) =>

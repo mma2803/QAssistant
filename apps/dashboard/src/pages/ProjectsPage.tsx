@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Project } from '@qassistant/shared';
 import { api } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
@@ -25,7 +25,40 @@ export function ProjectsPage(): JSX.Element {
   const [createError, setCreateError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // knowledge hub editor (admin only; spec "Admin edits project context")
+  const [km, setKm] = useState('');
+  const [kmError, setKmError] = useState<string | null>(null);
+  const [kmBusy, setKmBusy] = useState(false);
+  const [kmSaved, setKmSaved] = useState(false);
+
   const current = (projects.data ?? []).find((p) => p.id === selected) ?? projects.data?.[0] ?? null;
+
+  // Load the selected project's overview into the editor when the project changes.
+  useEffect(() => {
+    setKm(current?.knowledgeMd ?? '');
+    setKmError(null);
+    setKmSaved(false);
+  }, [current?.id]);
+
+  async function onSaveKnowledge(): Promise<void> {
+    if (!current) return;
+    setKmError(null);
+    setKmBusy(true);
+    setKmSaved(false);
+    try {
+      await api.setKnowledge(current.id, {
+        knowledgeMd: km.trim() ? km : null,
+        // Preserve the existing credentials reference; this editor only edits the overview.
+        defaultCredsSecretRef: current.defaultCredsSecretRef ?? null,
+      });
+      projects.reload();
+      setKmSaved(true);
+    } catch (err) {
+      setKmError(err instanceof Error ? err.message : 'Could not save knowledge hub');
+    } finally {
+      setKmBusy(false);
+    }
+  }
 
   async function onCreate(): Promise<void> {
     setCreateError(null);
@@ -139,7 +172,41 @@ export function ProjectsPage(): JSX.Element {
           </div>
 
           <h3 style={{ marginBottom: 0 }}>Knowledge hub</h3>
-          {current.knowledgeMd ? (
+          {isAdmin ? (
+            // Admins edit the overview here (the backend role guard is the
+            // authoritative control); the PUT endpoint is admin-only.
+            <div className="col" style={{ gap: 8 }}>
+              {kmError && <div className="error">{kmError}</div>}
+              <textarea
+                value={km}
+                onChange={(e) => {
+                  setKm(e.target.value);
+                  setKmSaved(false);
+                }}
+                rows={10}
+                placeholder="# How this app works&#10;&#10;Login, key flows, important selectors..."
+                style={{ width: '100%', fontFamily: 'monospace', resize: 'vertical' }}
+              />
+              <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+                <button
+                  className="primary"
+                  type="button"
+                  disabled={kmBusy}
+                  onClick={() => void onSaveKnowledge()}
+                >
+                  {kmBusy ? 'Saving...' : 'Save knowledge hub'}
+                </button>
+                {kmSaved && <span className="muted">Saved ✓</span>}
+              </div>
+              {km.trim() && (
+                <div
+                  className="knowledge"
+                  // Markdown is escaped in renderMarkdown (no raw HTML passthrough).
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(km) }}
+                />
+              )}
+            </div>
+          ) : current.knowledgeMd ? (
             <div
               className="knowledge"
               // Markdown is escaped before rendering in renderMarkdown (no raw HTML

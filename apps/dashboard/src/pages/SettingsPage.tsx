@@ -14,27 +14,42 @@ export function SettingsPage(): JSX.Element {
   const settings = useAsync(() => api.getTenantSettings(), []);
   const [framework, setFramework] = useState('');
   const [language, setLanguage] = useState('');
+  // Whether the user explicitly picked "Custom". Kept as state (not derived from
+  // the values) so selecting Custom sticks even when the current values still
+  // happen to match a preset — otherwise the dropdown snaps back to the preset.
+  const [customMode, setCustomMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Seed the form from the loaded default once it arrives.
+  // Seed the form from the loaded default once it arrives. If that default
+  // doesn't match any preset, start in Custom mode so the fields are editable.
   useEffect(() => {
     if (settings.data) {
       setFramework(settings.data.defaultTestFramework);
       setLanguage(settings.data.defaultTestLanguage);
+      const matches = TEST_FRAMEWORK_PRESETS.some(
+        (p) =>
+          p.framework === settings.data!.defaultTestFramework &&
+          p.language === settings.data!.defaultTestLanguage,
+      );
+      setCustomMode(!matches);
     }
   }, [settings.data]);
 
-  // The dropdown matches a preset when both fields equal it, else "Custom".
   const presetIndex = TEST_FRAMEWORK_PRESETS.findIndex(
     (p) => p.framework === framework && p.language === language,
   );
-  const choice = presetIndex >= 0 ? String(presetIndex) : 'custom';
+  // Show "Custom" when explicitly chosen OR when the values match no preset.
+  const choice = customMode || presetIndex < 0 ? 'custom' : String(presetIndex);
 
   function onChoose(value: string): void {
     setSaved(false);
-    if (value === 'custom') return; // keep the current fields for free editing
+    if (value === 'custom') {
+      setCustomMode(true); // reveal the free-form fields and keep them
+      return;
+    }
+    setCustomMode(false);
     const preset = TEST_FRAMEWORK_PRESETS[Number(value)];
     if (preset) {
       setFramework(preset.framework);

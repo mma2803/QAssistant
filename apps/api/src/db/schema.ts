@@ -120,6 +120,10 @@ export const projects = pgTable(
     screenshotDefault: boolean('screenshot_default').notNull().default(false),
     knowledgeMd: text('knowledge_md'),
     defaultCredsSecretRef: text('default_creds_secret_ref'),
+    // Per-project codegen default; NULL = inherit the tenant default. Free-form
+    // (custom entry allowed), so no CHECK constraint. See migration 0004.
+    defaultTestFramework: text('default_test_framework'),
+    defaultTestLanguage: text('default_test_language'),
     maskingSelectors: jsonb('masking_selectors').notNull().default(sql`'[]'::jsonb`),
     inactivityTimeoutSeconds: integer('inactivity_timeout_seconds').notNull().default(900),
     createdAt,

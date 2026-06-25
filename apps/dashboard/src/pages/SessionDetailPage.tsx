@@ -138,6 +138,7 @@ export function SessionDetailPage(): JSX.Element {
 
       <GenerationsSection
         sessionId={sessionId}
+        projectId={session.projectId}
         generations={generations}
         comments={comments}
         busyId={busyId}
@@ -170,6 +171,7 @@ function Meta({ k, v }: { k: string; v: string }): JSX.Element {
 
 interface GenSectionProps {
   sessionId: string;
+  projectId: string;
   generations: GeneratedTest[];
   comments: { id: string; body: string; generatedTestId: string | null; createdAt: string }[];
   busyId: string | null;
@@ -186,10 +188,13 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
   const [comment, setComment] = useState('');
   const [target, setTarget] = useState<string>('');
 
-  // Per-generation framework/language selector. '' = use the tenant default
+  // Per-generation framework/language selector. '' = use the resolved default
   // (no override sent), '0'..'N' = a preset, 'custom' = the free-form entry.
-  // Choosing here only affects this generation; it never changes the tenant default.
-  const settings = useAsync(() => api.getTenantSettings(), []);
+  // Choosing here only affects this generation; it never changes any default.
+  // The effective default for this session is the project default, falling back
+  // to the tenant default, then Playwright/TypeScript.
+  const project = useAsync(() => api.getProject(props.projectId), [props.projectId]);
+  const tenant = useAsync(() => api.getTenantSettings(), []);
   const [fwChoice, setFwChoice] = useState<string>('');
   const [customFw, setCustomFw] = useState('');
   const [customLang, setCustomLang] = useState('');
@@ -207,9 +212,11 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
     return preset ? { framework: preset.framework, language: preset.language } : undefined;
   }
 
-  const tenantDefaultLabel = settings.data
-    ? `${settings.data.defaultTestFramework} / ${settings.data.defaultTestLanguage}`
-    : 'tenant default';
+  const effectiveFramework =
+    project.data?.defaultTestFramework ?? tenant.data?.defaultTestFramework ?? 'Playwright';
+  const effectiveLanguage =
+    project.data?.defaultTestLanguage ?? tenant.data?.defaultTestLanguage ?? 'TypeScript';
+  const defaultLabel = `${effectiveFramework} / ${effectiveLanguage}`;
 
   return (
     <div className="card col">
@@ -221,7 +228,7 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
             value={fwChoice}
             onChange={(e) => setFwChoice(e.target.value)}
           >
-            <option value="">Tenant default ({tenantDefaultLabel})</option>
+            <option value="">Default ({defaultLabel})</option>
             {TEST_FRAMEWORK_PRESETS.map((p, i) => (
               <option key={`${p.framework}-${p.language}`} value={String(i)}>
                 {p.framework} / {p.language}

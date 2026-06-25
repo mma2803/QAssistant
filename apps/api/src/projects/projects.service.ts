@@ -4,6 +4,7 @@ import type {
   CreateProjectRequest,
   UpdateProjectRequest,
   SetKnowledgeRequest,
+  SetProjectTestFrameworkRequest,
   SetJiraConfigRequest,
   JiraTestResponse,
   Project,
@@ -147,6 +148,26 @@ export class ProjectsService {
       .set({
         knowledgeMd: input.knowledgeMd,
         defaultCredsSecretRef: input.defaultCredsSecretRef,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .returning();
+    return toProject(row!);
+  }
+
+  /**
+   * PUT /projects/{id}/test-framework: set the per-project default codegen target
+   * (change: configurable-test-framework). Open to any tenant user. null = clear
+   * the project value and inherit the tenant default for that field.
+   */
+  async setTestFramework(projectId: string, input: SetProjectTestFrameworkRequest): Promise<Project> {
+    const tenantId = this.requireTenant();
+    await this.loadProjectRow(projectId);
+    const [row] = await this.ctx.dbTx
+      .update(projects)
+      .set({
+        defaultTestFramework: input.defaultTestFramework,
+        defaultTestLanguage: input.defaultTestLanguage,
         updatedAt: new Date(),
       })
       .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))

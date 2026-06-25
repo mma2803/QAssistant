@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString } from '../common.js';
+import { nonEmptyString, testFrameworkSchema, testLanguageSchema } from '../common.js';
 import { PROJECT_STATUSES } from '../enums.js';
 import { projectSchema, jiraConfigSchema } from '../entities.js';
 
@@ -37,6 +37,17 @@ export const setKnowledgeRequestSchema = z.object({
   defaultCredsSecretRef: z.string().nullable(),
 });
 export type SetKnowledgeRequest = z.infer<typeof setKnowledgeRequestSchema>;
+
+/**
+ * PUT /projects/{projectId}/test-framework: per-project default codegen target
+ * (change: configurable-test-framework). Open to any tenant user. null on either
+ * field = inherit the tenant default for that field.
+ */
+export const setProjectTestFrameworkRequestSchema = z.object({
+  defaultTestFramework: testFrameworkSchema.nullable(),
+  defaultTestLanguage: testLanguageSchema.nullable(),
+});
+export type SetProjectTestFrameworkRequest = z.infer<typeof setProjectTestFrameworkRequestSchema>;
 
 /** PUT /projects/{projectId}/jira: create/replace Jira config (token goes to Secret Manager). */
 export const setJiraConfigRequestSchema = z.object({

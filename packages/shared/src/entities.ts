@@ -55,6 +55,9 @@ export const projectSchema = z.object({
   screenshotDefault: z.boolean(),
   knowledgeMd: z.string().nullable(),
   defaultCredsSecretRef: z.string().nullable(),
+  // Per-project codegen default; null = inherit the tenant default.
+  defaultTestFramework: z.string().nullable(),
+  defaultTestLanguage: z.string().nullable(),
   maskingSelectors: z.array(z.string()),
   inactivityTimeoutSeconds: z.number().int().positive(),
   createdAt: isoTimestamp,

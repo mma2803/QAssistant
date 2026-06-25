@@ -13,10 +13,12 @@ import {
   createProjectRequestSchema,
   updateProjectRequestSchema,
   setKnowledgeRequestSchema,
+  setProjectTestFrameworkRequestSchema,
   setJiraConfigRequestSchema,
   type CreateProjectRequest,
   type UpdateProjectRequest,
   type SetKnowledgeRequest,
+  type SetProjectTestFrameworkRequest,
   type SetJiraConfigRequest,
   type Project,
   type JiraConfig,
@@ -72,6 +74,18 @@ export class ProjectsController {
     @Body(new ZodValidationPipe(setKnowledgeRequestSchema)) body: SetKnowledgeRequest,
   ): Promise<Project> {
     return this.projects.setKnowledge(projectId, body);
+  }
+
+  // Per-project default test framework/language. Open to any tenant user (a team
+  // preference, like the tenant fallback), unlike the admin-only project writes.
+  @Put(':projectId/test-framework')
+  @Roles('admin', 'qa-engineer')
+  setTestFramework(
+    @Param('projectId') projectId: string,
+    @Body(new ZodValidationPipe(setProjectTestFrameworkRequestSchema))
+    body: SetProjectTestFrameworkRequest,
+  ): Promise<Project> {
+    return this.projects.setTestFramework(projectId, body);
   }
 
   @Put(':projectId/jira')

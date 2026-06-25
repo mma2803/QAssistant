@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Project } from '@qassistant/shared';
+import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 import { api } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { useAsync } from '../lib/useAsync';
@@ -31,6 +32,15 @@ export function ProjectsPage(): JSX.Element {
   const [kmBusy, setKmBusy] = useState(false);
   const [kmSaved, setKmSaved] = useState(false);
 
+  // per-project test framework (any tenant user). '' = inherit tenant default,
+  // '0'..'N' = a preset, 'custom' = the free-form fields.
+  const [fwChoice, setFwChoice] = useState('');
+  const [fwCustomName, setFwCustomName] = useState('');
+  const [fwCustomLang, setFwCustomLang] = useState('');
+  const [fwError, setFwError] = useState<string | null>(null);
+  const [fwBusy, setFwBusy] = useState(false);
+  const [fwSaved, setFwSaved] = useState(false);
+
   const current = (projects.data ?? []).find((p) => p.id === selected) ?? projects.data?.[0] ?? null;
 
   // Load the selected project's overview into the editor when the project changes.
@@ -39,6 +49,56 @@ export function ProjectsPage(): JSX.Element {
     setKmError(null);
     setKmSaved(false);
   }, [current?.id]);
+
+  // Seed the framework selector from the selected project: null -> inherit,
+  // a preset match -> that preset, otherwise -> custom with the stored values.
+  useEffect(() => {
+    setFwError(null);
+    setFwSaved(false);
+    const fw = current?.defaultTestFramework ?? null;
+    const lang = current?.defaultTestLanguage ?? null;
+    if (!fw || !lang) {
+      setFwChoice('');
+      setFwCustomName('');
+      setFwCustomLang('');
+      return;
+    }
+    const idx = TEST_FRAMEWORK_PRESETS.findIndex((p) => p.framework === fw && p.language === lang);
+    setFwChoice(idx >= 0 ? String(idx) : 'custom');
+    setFwCustomName(fw);
+    setFwCustomLang(lang);
+  }, [current?.id]);
+
+  async function onSaveFramework(): Promise<void> {
+    if (!current) return;
+    setFwError(null);
+    setFwBusy(true);
+    setFwSaved(false);
+    try {
+      let body: { defaultTestFramework: string | null; defaultTestLanguage: string | null };
+      if (fwChoice === '') {
+        body = { defaultTestFramework: null, defaultTestLanguage: null };
+      } else if (fwChoice === 'custom') {
+        body = {
+          defaultTestFramework: fwCustomName.trim(),
+          defaultTestLanguage: fwCustomLang.trim(),
+        };
+      } else {
+        const preset = TEST_FRAMEWORK_PRESETS[Number(fwChoice)]!;
+        body = { defaultTestFramework: preset.framework, defaultTestLanguage: preset.language };
+      }
+      await api.setProjectTestFramework(current.id, body);
+      projects.reload();
+      setFwSaved(true);
+    } catch (err) {
+      setFwError(err instanceof Error ? err.message : 'Could not save the project framework');
+    } finally {
+      setFwBusy(false);
+    }
+  }
+
+  const fwCustomIncomplete =
+    fwChoice === 'custom' && !(fwCustomName.trim() && fwCustomLang.trim());
 
   async function onSaveKnowledge(): Promise<void> {
     if (!current) return;
@@ -168,6 +228,61 @@ export function ProjectsPage(): JSX.Element {
                 Screenshots default
               </span>
               <span>{current.screenshotDefault ? 'on' : 'off'}</span>
+            </div>
+          </div>
+
+          <h3 style={{ marginBottom: 0 }}>Test framework</h3>
+          {/* Per-project default codegen target. Open to any tenant user; falls
+              back to the tenant default when set to "Inherit". */}
+          <div className="col" style={{ gap: 8, maxWidth: 460 }}>
+            {fwError && <div className="error">{fwError}</div>}
+            <select
+              value={fwChoice}
+              onChange={(e) => {
+                setFwChoice(e.target.value);
+                setFwSaved(false);
+              }}
+            >
+              <option value="">Inherit tenant default</option>
+              {TEST_FRAMEWORK_PRESETS.map((p, i) => (
+                <option key={`${p.framework}-${p.language}`} value={String(i)}>
+                  {p.framework} / {p.language}
+                </option>
+              ))}
+              <option value="custom">Custom…</option>
+            </select>
+            {fwChoice === 'custom' && (
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  value={fwCustomName}
+                  onChange={(e) => {
+                    setFwCustomName(e.target.value);
+                    setFwSaved(false);
+                  }}
+                  placeholder="Framework"
+                  style={{ width: 160 }}
+                />
+                <input
+                  value={fwCustomLang}
+                  onChange={(e) => {
+                    setFwCustomLang(e.target.value);
+                    setFwSaved(false);
+                  }}
+                  placeholder="Language"
+                  style={{ width: 160 }}
+                />
+              </div>
+            )}
+            <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+              <button
+                className="primary"
+                type="button"
+                disabled={fwBusy || fwCustomIncomplete}
+                onClick={() => void onSaveFramework()}
+              >
+                {fwBusy ? 'Saving...' : 'Save framework'}
+              </button>
+              {fwSaved && <span className="muted">Saved ✓</span>}
             </div>
           </div>
 

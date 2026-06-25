@@ -73,19 +73,27 @@ The system SHALL treat captured DOM, screenshots, Jira text/comments/attachments
 ## ADDED Requirements
 
 ### Requirement: Selectable test framework
-The system SHALL let code generation target a selectable test framework and language instead of a fixed one, with Playwright using TypeScript as the default and the fallback when no selection is made. Each tenant SHALL have a tenant-wide default framework and language that any tenant user (admin or qa-engineer) MAY change. The dashboard SHALL present, next to the Generate action, a selector offering five predefined framework/language options plus a free-form custom entry for an arbitrary framework and language. A choice made in that selector SHALL apply only to that single generation as an override and SHALL NOT change the tenant default.
+The system SHALL let code generation target a selectable test framework and language instead of a fixed one. The target SHALL be resolved per field in priority order: a per-generation override, then the project default, then the tenant default, then Playwright with TypeScript. Each project MAY have a default framework and language (unset = inherit the tenant default), and each tenant SHALL have a tenant-wide default; any tenant user (admin or qa-engineer) MAY change either default. The dashboard SHALL present, next to the Generate action, a selector offering five predefined framework/language options plus a free-form custom entry for an arbitrary framework and language; a choice made there SHALL apply only to that single generation as an override and SHALL NOT change any stored default.
 
-#### Scenario: Tenant default applies when no override is chosen
+#### Scenario: Resolved default applies when no override is chosen
 - **WHEN** a user requests generation without choosing a framework in the Generate selector
-- **THEN** the system generates in the tenant's default framework and language, which is Playwright with TypeScript until a tenant user changes it
+- **THEN** the system generates in the project's default framework and language, falling back to the tenant default, then to Playwright with TypeScript
 
-#### Scenario: Per-generation override does not change the tenant default
+#### Scenario: Project default overrides the tenant default
+- **WHEN** a project has its own default framework and language set, differing from the tenant default
+- **THEN** generations for sessions of that project use the project default rather than the tenant default
+
+#### Scenario: Cleared project default inherits the tenant default
+- **WHEN** a project's default framework and language are unset
+- **THEN** generations for that project use the tenant default
+
+#### Scenario: Per-generation override does not change any default
 - **WHEN** a user picks one of the offered framework/language options next to the Generate action and runs that generation
-- **THEN** that single generation targets the chosen framework and language, and the tenant default remains unchanged for subsequent generations
+- **THEN** that single generation targets the chosen framework and language, and the project and tenant defaults remain unchanged for subsequent generations
 
-#### Scenario: Any tenant user changes the tenant default
-- **WHEN** any tenant user, whether admin or qa-engineer, sets the tenant's default framework and language
-- **THEN** the system records the new default and applies it to subsequent generations across the tenant that do not specify an override
+#### Scenario: Any tenant user changes a default
+- **WHEN** any tenant user, whether admin or qa-engineer, sets the project's or the tenant's default framework and language
+- **THEN** the system records the new default and applies it to subsequent generations that do not specify an override
 
 #### Scenario: Custom free-form framework is accepted as untrusted text
 - **WHEN** a user enters a custom framework and language in the free-form field

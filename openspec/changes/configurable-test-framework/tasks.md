@@ -34,3 +34,12 @@
 - [x] 6.3 Test: a qa-engineer (not admin) can change the tenant default and it applies tenant-wide
 - [x] 6.4 Test: custom free-form framework is accepted, recorded, and handled as untrusted input
 - [x] 6.5 Test: generated test metadata and ranking reflect the framework used
+
+## 7. Per-project default (rework: framework par projet, fallback tenant)
+
+- [x] 7.1 Add nullable `projects.default_test_framework/language` columns (migration 0004; NULL = inherit tenant)
+- [x] 7.2 `PUT /projects/{id}/test-framework` open to any tenant user (controller + ProjectsService.setTestFramework)
+- [x] 7.3 Resolve target per field: per-generation override → project default → tenant default → Playwright/TypeScript
+- [x] 7.4 Dashboard: per-project framework editor in Project context (any user); Generate selector shows the resolved (project→tenant) default
+- [x] 7.5 Tests: project default beats tenant default; cleared project default falls back to tenant (e2e #31); route exercised in http-e2e
+- [x] 7.6 Specs/proposal updated (per-project default + tenant fallback)

@@ -366,6 +366,20 @@ describe('HTTP REST surface', () => {
     assert.equal(knowledge.status, 200);
     assert.match(knowledge.body.knowledgeMd, /stable selectors/);
 
+    // Per-project default framework (configurable-test-framework). Open to any
+    // tenant user -> exercise as a qa-engineer (not admin).
+    const projFramework = await request<{
+      defaultTestFramework: string | null;
+      defaultTestLanguage: string | null;
+    }>(`/api/v1/projects/${projectId}/test-framework`, {
+      method: 'PUT',
+      token: qaToken,
+      body: { defaultTestFramework: 'Cypress', defaultTestLanguage: 'JavaScript' },
+    });
+    assert.equal(projFramework.status, 200);
+    assert.equal(projFramework.body.defaultTestFramework, 'Cypress');
+    assert.equal(projFramework.body.defaultTestLanguage, 'JavaScript');
+
     const jira = await request(`/api/v1/projects/${projectId}/jira`, {
       method: 'PUT',
       token: adminToken,

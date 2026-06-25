@@ -733,6 +733,48 @@ describe('end-to-end MVP flow (service layer)', () => {
     assert.equal(latest.framework, 'Selenium', 'new tenant default applied to generation');
     assert.equal(latest.language, 'Java', 'new tenant default language applied');
   });
+
+  it('31. a project default overrides the tenant default; clearing it falls back', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    // Tenant default is Selenium/Java (set in #30). Give the PROJECT a different
+    // default and generate with no override -> the project default must win.
+    await h.asTenant(qa, async (ctx) => {
+      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      await projects.setTestFramework(projectId, {
+        defaultTestFramework: 'Cypress',
+        defaultTestLanguage: 'JavaScript',
+      });
+    });
+    await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      await codegen.generate(sessionId, { kind: 'playwright_test' });
+    });
+    const withProject = await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      return (await codegen.listGenerations(sessionId)).at(-1)!;
+    });
+    assert.equal(withProject.framework, 'Cypress', 'project default beats tenant default');
+    assert.equal(withProject.language, 'JavaScript');
+
+    // Clear the project default (null) -> generation falls back to the tenant default.
+    await h.asTenant(qa, async (ctx) => {
+      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      await projects.setTestFramework(projectId, {
+        defaultTestFramework: null,
+        defaultTestLanguage: null,
+      });
+    });
+    await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      await codegen.generate(sessionId, { kind: 'playwright_test' });
+    });
+    const afterClear = await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      return (await codegen.listGenerations(sessionId)).at(-1)!;
+    });
+    assert.equal(afterClear.framework, 'Selenium', 'falls back to the tenant default when project is null');
+    assert.equal(afterClear.language, 'Java');
+  });
 });
 
 /** Construct a real JiraValidationService for a request (unused on the description path). */

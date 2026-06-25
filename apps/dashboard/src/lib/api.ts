@@ -14,6 +14,7 @@ import type {
   JobResponse,
   CreateProjectRequest,
   SetKnowledgeRequest,
+  SetProjectTestFrameworkRequest,
   CreateUserRequest,
   UpdateUserRequest,
   ResetPasswordRequest,
@@ -144,6 +145,9 @@ export const api = {
   createProject: (body: CreateProjectRequest) => request<Project>('POST', '/projects', body),
   setKnowledge: (projectId: string, body: SetKnowledgeRequest) =>
     request<Project>('PUT', `/projects/${projectId}/knowledge`, body),
+  // per-project default test framework/language; open to any tenant user.
+  setProjectTestFramework: (projectId: string, body: SetProjectTestFrameworkRequest) =>
+    request<Project>('PUT', `/projects/${projectId}/test-framework`, body),
 
   // --- dashboard reads (4.7) ---
   listSessions: (q: Partial<DashboardSessionsQuery> = {}) =>

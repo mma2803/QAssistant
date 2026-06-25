@@ -86,6 +86,8 @@ export function toProject(row: ProjectRow): Project {
     screenshotDefault: row.screenshotDefault,
     knowledgeMd: row.knowledgeMd,
     defaultCredsSecretRef: row.defaultCredsSecretRef,
+    defaultTestFramework: row.defaultTestFramework,
+    defaultTestLanguage: row.defaultTestLanguage,
     maskingSelectors: (row.maskingSelectors as string[] | null) ?? [],
     inactivityTimeoutSeconds: row.inactivityTimeoutSeconds,
     createdAt: iso(row.createdAt),

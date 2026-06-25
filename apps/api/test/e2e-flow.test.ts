@@ -41,6 +41,7 @@ import { AuthRoutesService } from '../src/auth-routes/auth-routes.service.js';
 import { ProjectsService } from '../src/projects/projects.service.js';
 import { CaptureService } from '../src/capture/capture.service.js';
 import { CodegenService } from '../src/codegen/codegen.service.js';
+import { TenantSettingsService } from '../src/tenant-settings/tenant-settings.service.js';
 import { DashboardService } from '../src/dashboard/dashboard.service.js';
 import { JiraValidationService } from '../src/jira/jira-validation.service.js';
 import { artifactObjectPath } from '../src/storage/gcs-signer.service.js';
@@ -326,6 +327,9 @@ describe('end-to-end MVP flow (service layer)', () => {
     generatedTestId = gen.id;
     assert.equal(gen.kind, 'playwright_test');
     assert.equal(gen.modelTier, 'pro', 'Playwright tests route to the Pro tier');
+    // 6.1: no framework override -> the tenant default (Playwright/TypeScript).
+    assert.equal(gen.framework, 'Playwright', 'defaults to the tenant framework');
+    assert.equal(gen.language, 'TypeScript', 'defaults to the tenant language');
     assert.equal(gen.reviewStatus, 'draft', 'starts as a draft pending review');
     assert.match(gen.code, /@playwright\/test/, 'is a Playwright test');
     assert.match(gen.code, /expect\(/, 'contains an assertion');
@@ -654,6 +658,80 @@ describe('end-to-end MVP flow (service layer)', () => {
       return projects.getProject(projectId);
     });
     assert.equal(read.knowledgeMd, updated.knowledgeMd);
+  });
+
+  it('28. a per-generation framework override is persisted; tenant default is unchanged', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    // 6.2: pick a preset other than the default for this one generation.
+    await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      await codegen.generate(sessionId, {
+        kind: 'playwright_test',
+        framework: 'Cypress',
+        language: 'JavaScript',
+      });
+    });
+    const latest = await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      const all = await codegen.listGenerations(sessionId);
+      return all.at(-1)!;
+    });
+    // 6.5: the chosen target is recorded on the version (row + prompt summary).
+    assert.equal(latest.framework, 'Cypress', 'override framework persisted on the version');
+    assert.equal(latest.language, 'JavaScript', 'override language persisted on the version');
+    assert.equal(latest.promptInputsSummary.framework, 'Cypress', 'recorded in the prompt summary');
+
+    // The override must NOT have mutated the tenant default.
+    const settings = await h.asTenant(qa, async (ctx) => {
+      const tenant = new TenantSettingsService(ctx);
+      return tenant.get();
+    });
+    assert.equal(settings.defaultTestFramework, 'Playwright', 'tenant default still Playwright');
+    assert.equal(settings.defaultTestLanguage, 'TypeScript', 'tenant default still TypeScript');
+  });
+
+  it('29. a custom free-form framework/language is accepted and recorded', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    // 6.4: a value outside the predefined presets is allowed (free-form entry).
+    await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      await codegen.generate(sessionId, {
+        kind: 'playwright_test',
+        framework: 'WebdriverIO',
+        language: 'Go',
+      });
+    });
+    const latest = await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      const all = await codegen.listGenerations(sessionId);
+      return all.at(-1)!;
+    });
+    assert.equal(latest.framework, 'WebdriverIO', 'custom framework persisted');
+    assert.equal(latest.language, 'Go', 'custom language persisted');
+  });
+
+  it('30. any tenant user (qa-engineer) sets the tenant default; it drives new generations', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    // 6.3: a qa-engineer (not an admin) changes the tenant-wide default.
+    const saved = await h.asTenant(qa, async (ctx) => {
+      const tenant = new TenantSettingsService(ctx);
+      return tenant.update({ defaultTestFramework: 'Selenium', defaultTestLanguage: 'Java' });
+    });
+    assert.equal(saved.defaultTestFramework, 'Selenium');
+    assert.equal(saved.defaultTestLanguage, 'Java');
+
+    // A subsequent generation with NO override now uses the new tenant default.
+    await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      await codegen.generate(sessionId, { kind: 'playwright_test' });
+    });
+    const latest = await h.asTenant(qa, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      const all = await codegen.listGenerations(sessionId);
+      return all.at(-1)!;
+    });
+    assert.equal(latest.framework, 'Selenium', 'new tenant default applied to generation');
+    assert.equal(latest.language, 'Java', 'new tenant default language applied');
   });
 });
 

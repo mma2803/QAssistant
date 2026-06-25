@@ -29,8 +29,8 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Test: no selection → output identical to today (Playwright/TypeScript)
-- [ ] 6.2 Test: per-generation override produces the chosen framework and leaves the tenant default unchanged
-- [ ] 6.3 Test: a qa-engineer (not admin) can change the tenant default and it applies tenant-wide
-- [ ] 6.4 Test: custom free-form framework is accepted, recorded, and handled as untrusted input
-- [ ] 6.5 Test: generated test metadata and ranking reflect the framework used
+- [x] 6.1 Test: no selection → output identical to today (Playwright/TypeScript)
+- [x] 6.2 Test: per-generation override produces the chosen framework and leaves the tenant default unchanged
+- [x] 6.3 Test: a qa-engineer (not admin) can change the tenant default and it applies tenant-wide
+- [x] 6.4 Test: custom free-form framework is accepted, recorded, and handled as untrusted input
+- [x] 6.5 Test: generated test metadata and ranking reflect the framework used

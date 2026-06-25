@@ -47,6 +47,24 @@ export type ModelTier = (typeof MODEL_TIERS)[number];
 export const REVIEW_STATUSES = ['draft', 'approved'] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
+/**
+ * Predefined framework/language options offered in the dashboard's "Generate"
+ * selector. NOTE: unlike the enums above, the `framework`/`language` columns are
+ * NOT CHECK-constrained — the selector also accepts a free-form custom entry, so
+ * any string is valid. This list only drives the dropdown presets.
+ */
+export const TEST_FRAMEWORK_PRESETS = [
+  { framework: 'Playwright', language: 'TypeScript' },
+  { framework: 'Playwright', language: 'Python' },
+  { framework: 'Cypress', language: 'JavaScript' },
+  { framework: 'Selenium', language: 'Python' },
+  { framework: 'Selenium', language: 'Java' },
+] as const;
+
+/** Default target when a tenant has set nothing and no per-generation override is given. */
+export const DEFAULT_TEST_FRAMEWORK = 'Playwright';
+export const DEFAULT_TEST_LANGUAGE = 'TypeScript';
+
 /** Standard error envelope codes used across the REST surface (contract section 4). */
 export const ERROR_CODES = [
   'unauthenticated',

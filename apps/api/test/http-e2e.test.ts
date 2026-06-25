@@ -591,6 +591,8 @@ describe('HTTP REST surface', () => {
         createdBy: qaCreated.body.id,
         kind: 'replay_script',
         modelTier: 'flash',
+        framework: 'Playwright',
+        language: 'TypeScript',
       },
     });
     assert.equal(internalGenerate.status, 200);
@@ -633,6 +635,29 @@ describe('HTTP REST surface', () => {
     );
     assert.equal(purged.status, 200);
     assert.ok(purged.body.purgedSessionIds.includes(sessionId));
+
+    // Tenant-wide codegen default (change: configurable-test-framework). Any
+    // tenant user may read AND change it — exercise as a qa-engineer (not admin)
+    // to prove the route is not admin-gated.
+    const settingsRead = await request<{ defaultTestFramework: string; defaultTestLanguage: string }>(
+      '/api/v1/tenant/settings',
+      { token: qaToken },
+    );
+    assert.equal(settingsRead.status, 200);
+    assert.equal(settingsRead.body.defaultTestFramework, 'Playwright');
+    assert.equal(settingsRead.body.defaultTestLanguage, 'TypeScript');
+
+    const settingsUpdate = await request<{ defaultTestFramework: string; defaultTestLanguage: string }>(
+      '/api/v1/tenant/settings',
+      {
+        method: 'PUT',
+        token: qaToken,
+        body: { defaultTestFramework: 'Cypress', defaultTestLanguage: 'JavaScript' },
+      },
+    );
+    assert.equal(settingsUpdate.status, 200);
+    assert.equal(settingsUpdate.body.defaultTestFramework, 'Cypress');
+    assert.equal(settingsUpdate.body.defaultTestLanguage, 'JavaScript');
 
     const apiSource = fileURLToPath(new URL('../src', import.meta.url));
     const missingRoutes = inventoryApiRoutes(apiSource).filter(

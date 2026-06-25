@@ -67,7 +67,13 @@ export class CodegenWorkerService {
       const tier: ModelTier = payload.modelTier;
       const sources = await this.gatherSources(db, payload, session, project);
 
-      const { prompt, summary } = buildPrompt({ kind: payload.kind, tier, sources });
+      const { prompt, summary } = buildPrompt({
+        kind: payload.kind,
+        tier,
+        framework: payload.framework,
+        language: payload.language,
+        sources,
+      });
       const { code, modelId } = await this.gemini.generate({ tier, prompt });
 
       const version = await this.nextVersion(db, payload.sessionId);
@@ -81,6 +87,8 @@ export class CodegenWorkerService {
         modelTier: tier,
         modelId,
         code,
+        framework: payload.framework,
+        language: payload.language,
         reviewStatus: 'draft',
         integrated: false,
         promptInputsSummary: summary,

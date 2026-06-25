@@ -1,14 +1,20 @@
 import { z } from 'zod';
-import { uuid, nonEmptyString } from '../common.js';
+import { uuid, nonEmptyString, testFrameworkSchema, testLanguageSchema } from '../common.js';
 import { GENERATED_TEST_KINDS, MODEL_TIERS } from '../enums.js';
 import { generatedTestSchema, generationCommentSchema } from '../entities.js';
 
 /** Codegen DTOs (contract section 4.5). Async via Cloud Tasks. */
 
-/** POST /sessions/{sessionId}/generate: enqueue a codegen job. */
+/**
+ * POST /sessions/{sessionId}/generate: enqueue a codegen job. `framework` and
+ * `language` are an optional per-generation override (the selector next to the
+ * Generate button); when omitted, the service falls back to the tenant default.
+ */
 export const generateRequestSchema = z.object({
   kind: z.enum(GENERATED_TEST_KINDS).default('playwright_test'),
   modelTier: z.enum(MODEL_TIERS).optional(),
+  framework: testFrameworkSchema.optional(),
+  language: testLanguageSchema.optional(),
 });
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 
@@ -42,6 +48,8 @@ export const commentResponseSchema = generationCommentSchema;
 export const regenerateRequestSchema = z.object({
   kind: z.enum(GENERATED_TEST_KINDS).default('playwright_test'),
   modelTier: z.enum(MODEL_TIERS).optional(),
+  framework: testFrameworkSchema.optional(),
+  language: testLanguageSchema.optional(),
   // The comment that drives this regeneration; stamped as source_comment_id.
   sourceCommentId: uuid.optional(),
 });
@@ -60,6 +68,9 @@ export const generateTaskPayloadSchema = z.object({
   createdBy: uuid,
   kind: z.enum(GENERATED_TEST_KINDS),
   modelTier: z.enum(MODEL_TIERS),
+  // Resolved target (override or tenant default) the worker persists on the row.
+  framework: z.string(),
+  language: z.string(),
   sourceCommentId: uuid.optional(),
 });
 export type GenerateTaskPayload = z.infer<typeof generateTaskPayloadSchema>;

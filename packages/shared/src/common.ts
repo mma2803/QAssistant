@@ -10,6 +10,14 @@ export const isoTimestamp = z.string().datetime({ offset: true });
 /** Non-empty trimmed string helper. */
 export const nonEmptyString = z.string().trim().min(1);
 
+/**
+ * Codegen target framework / language. Accepts BOTH the predefined presets and a
+ * free-form custom entry, so it is deliberately a bounded non-empty string, NOT
+ * an enum. Trimmed and length-capped to stay safe as DB text and prompt input.
+ */
+export const testFrameworkSchema = z.string().trim().min(1).max(60);
+export const testLanguageSchema = z.string().trim().min(1).max(60);
+
 /** Standard error envelope: { error: { code, message, details? } }. */
 export const errorEnvelopeSchema = z.object({
   error: z.object({

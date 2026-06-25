@@ -13,6 +13,7 @@ import { ProjectsModule } from './projects/projects.module.js';
 import { CaptureModule } from './capture/capture.module.js';
 import { CodegenModule } from './codegen/codegen.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
+import { TenantSettingsModule } from './tenant-settings/tenant-settings.module.js';
 
 /**
  * Root module.
@@ -52,6 +53,8 @@ const FEATURE_MODULES: NonNullable<unknown>[] = [
   CaptureModule,
   // Knowledge & codegen (section 4.5): Gemini routing, async generation, review.
   CodegenModule,
+  // Tenant-wide codegen settings (change: configurable-test-framework).
+  TenantSettingsModule,
   // Dashboards (section 5 / contract 4.6, 4.7, 6): reads, lifecycle, metrics.
   DashboardModule,
 ];

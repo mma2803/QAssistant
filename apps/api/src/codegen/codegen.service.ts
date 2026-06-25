@@ -10,9 +10,10 @@ import type {
   GenerationComment,
 } from '@qassistant/shared';
 import type { ModelTier } from '@qassistant/shared/enums';
+import { DEFAULT_TEST_FRAMEWORK, DEFAULT_TEST_LANGUAGE } from '@qassistant/shared/enums';
 import { RequestContext } from '../auth/request-context.js';
 import { AppException } from '../auth/errors.js';
-import { generatedTests, generationComments, sessions } from '../db/schema.js';
+import { generatedTests, generationComments, sessions, tenants } from '../db/schema.js';
 import { newId } from '../db/id.js';
 import { toGeneratedTest, toGenerationComment } from './serializers.js';
 import {
@@ -62,10 +63,38 @@ export class CodegenService {
     return kind === 'replay_script' ? 'flash' : 'pro';
   }
 
+  /**
+   * Resolve the codegen target: a per-generation override (the selector next to
+   * the Generate button) wins per-field; otherwise fall back to the tenant
+   * default, and finally to the hard default if the tenant row is unreadable.
+   * The framework/language are stamped on the task payload so the persisted
+   * version records exactly what was generated.
+   */
+  private async resolveTarget(input: {
+    framework?: string;
+    language?: string;
+  }): Promise<{ framework: string; language: string }> {
+    const tenantId = this.requireTenant();
+    const rows = await this.ctx.dbTx
+      .select({
+        framework: tenants.defaultTestFramework,
+        language: tenants.defaultTestLanguage,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    const def = rows[0];
+    return {
+      framework: input.framework ?? def?.framework ?? DEFAULT_TEST_FRAMEWORK,
+      language: input.language ?? def?.language ?? DEFAULT_TEST_LANGUAGE,
+    };
+  }
+
   /** POST /sessions/{id}/generate: enqueue a codegen job; returns { jobId }. */
   async generate(sessionId: string, input: GenerateRequest): Promise<JobResponse> {
     const session = await this.loadOwnSession(sessionId);
-    return this.enqueue(session, input.kind, this.resolveTier(input.kind, input.modelTier));
+    const target = await this.resolveTarget(input);
+    return this.enqueue(session, input.kind, this.resolveTier(input.kind, input.modelTier), target);
   }
 
   /**
@@ -94,10 +123,12 @@ export class CodegenService {
       }
     }
 
+    const target = await this.resolveTarget(input);
     return this.enqueue(
       session,
       input.kind,
       this.resolveTier(input.kind, input.modelTier),
+      target,
       input.sourceCommentId,
     );
   }
@@ -106,6 +137,7 @@ export class CodegenService {
     session: typeof sessions.$inferSelect,
     kind: GenerateRequest['kind'],
     tier: ModelTier,
+    target: { framework: string; language: string },
     sourceCommentId?: string,
   ): Promise<JobResponse> {
     const createdBy = this.requireActingUser();
@@ -117,6 +149,8 @@ export class CodegenService {
       createdBy,
       kind,
       modelTier: tier,
+      framework: target.framework,
+      language: target.language,
       ...(sourceCommentId ? { sourceCommentId } : {}),
     };
     await this.tasks.enqueueGenerate(payload);

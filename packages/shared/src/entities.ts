@@ -26,6 +26,8 @@ export const tenantSchema = z.object({
   name: z.string(),
   gcipTenantId: z.string(),
   status: z.enum(TENANT_STATUSES),
+  defaultTestFramework: z.string(),
+  defaultTestLanguage: z.string(),
   createdAt: isoTimestamp,
   updatedAt: isoTimestamp,
 });
@@ -127,6 +129,10 @@ export const flagSchema = z.object({
 export type Flag = z.infer<typeof flagSchema>;
 
 export const promptInputsSummarySchema = z.object({
+  // Target the test was generated for (configurable-test-framework). Optional so
+  // versions generated before the feature still validate.
+  framework: z.string().optional(),
+  language: z.string().optional(),
   sources: z.array(
     z.object({
       label: z.string(),
@@ -147,6 +153,8 @@ export const generatedTestSchema = z.object({
   modelTier: z.enum(MODEL_TIERS),
   modelId: z.string(),
   code: z.string(),
+  framework: z.string(),
+  language: z.string(),
   reviewStatus: z.enum(REVIEW_STATUSES),
   approvedBy: uuid.nullable(),
   approvedAt: isoTimestamp.nullable(),

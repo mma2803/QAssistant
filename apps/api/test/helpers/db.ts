@@ -12,11 +12,12 @@
  *   - app_user      : RLS-enforced runtime role (NOBYPASSRLS, not owner).
  *   - app_superadmin: BYPASSRLS provisioning role.
  *
- * The helper bootstraps the roles and applies both migration files
- * (0000_init.sql tables + 0001_rls.sql RLS/roles/grants) idempotently, so the
- * suite is self-contained and does not require `npm run db:migrate` first.
+ * The helper bootstraps the roles and applies every migration file in
+ * `src/db/migrations` (in lexical order) idempotently, so the suite is
+ * self-contained and does not require `npm run db:migrate` first. New
+ * migrations are picked up automatically — no hard-coded file list to update.
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, Pool } from 'pg';
@@ -113,7 +114,8 @@ export async function ensureSchema(): Promise<void> {
         "applied_at" timestamp with time zone NOT NULL DEFAULT now()
       )
     `);
-    for (const file of ['0000_init.sql', '0001_rls.sql']) {
+    const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
+    for (const file of files) {
       const applied = await migrator.query('SELECT 1 FROM "__migrations" WHERE name = $1', [file]);
       if ((applied.rowCount ?? 0) > 0) continue;
       const sqlText = await readFile(join(migrationsDir, file), 'utf8');

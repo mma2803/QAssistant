@@ -55,6 +55,8 @@ export function toTenant(row: TenantRow): Tenant {
     name: row.name,
     gcipTenantId: row.gcipTenantId,
     status: row.status as TenantStatus,
+    defaultTestFramework: row.defaultTestFramework,
+    defaultTestLanguage: row.defaultTestLanguage,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };

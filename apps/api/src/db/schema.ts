@@ -64,6 +64,10 @@ export const tenants = pgTable(
     name: text('name').notNull(),
     gcipTenantId: text('gcip_tenant_id').notNull(),
     status: text('status').notNull().default('active'),
+    // Tenant-wide default codegen target. Free-form (the Generate selector allows
+    // a custom entry), so deliberately no CHECK constraint. See migration 0002.
+    defaultTestFramework: text('default_test_framework').notNull().default('Playwright'),
+    defaultTestLanguage: text('default_test_language').notNull().default('TypeScript'),
     createdAt,
     updatedAt,
   },
@@ -298,6 +302,10 @@ export const generatedTests = pgTable(
     modelTier: text('model_tier').notNull(),
     modelId: text('model_id').notNull(),
     code: text('code').notNull(),
+    // Framework/language this version was generated in. Free-form (custom entry
+    // allowed), so no CHECK constraint. See migration 0002.
+    framework: text('framework').notNull().default('Playwright'),
+    language: text('language').notNull().default('TypeScript'),
     reviewStatus: text('review_status').notNull().default('draft'),
     approvedBy: uuid('approved_by').references(() => tenantUsers.id, { onDelete: 'restrict' }),
     approvedAt: timestamp('approved_at', { withTimezone: true }),

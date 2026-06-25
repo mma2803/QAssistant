@@ -33,6 +33,8 @@ export function toGeneratedTest(row: GeneratedTestRow): GeneratedTest {
     modelTier: row.modelTier as ModelTier,
     modelId: row.modelId,
     code: row.code,
+    framework: row.framework,
+    language: row.language,
     reviewStatus: row.reviewStatus as ReviewStatus,
     approvedBy: row.approvedBy,
     approvedAt: isoOrNull(row.approvedAt),

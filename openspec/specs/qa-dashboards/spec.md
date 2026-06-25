@@ -22,23 +22,15 @@ The system SHALL provide an admin view listing all recordings with their artifac
 - **THEN** the system displays its artifacts, selections, and a summary
 
 ### Requirement: Productivity metrics and ranking
-The system SHALL compute and display per-user productivity metrics and an admin-only MVP "Contribution ranking" that is directional, metric-based, and sorted by generated Playwright test count, then total recording duration (raw wall-clock, no idle exclusion in MVP), then recording count.
+The system SHALL compute and display per-user productivity metrics and an admin-only MVP "Contribution ranking" that is directional, metric-based, and sorted by generated test count (across all frameworks), then total recording duration (raw wall-clock, no idle exclusion in MVP), then recording count.
 
 #### Scenario: View per-user productivity
 - **WHEN** an admin opens the productivity view
-- **THEN** the system displays each user's effort/output metrics and admin-only contribution ranking sorted by generated Playwright test count, then total recording duration (raw wall-clock), then recording count
+- **THEN** the system displays each user's effort/output metrics and admin-only contribution ranking sorted by generated test count, then total recording duration (raw wall-clock), then recording count
 
 #### Scenario: Ranking uses visible metrics
 - **WHEN** an admin views the contribution ranking
 - **THEN** the system shows the metrics used for ordering and does not use a hidden weighted score
-
-#### Scenario: Duration is raw wall-clock
-- **WHEN** the system computes recording duration for productivity metrics and ranking
-- **THEN** it uses raw wall-clock duration without excluding idle periods in MVP
-
-#### Scenario: Directional ranking message shown
-- **WHEN** an admin views the contribution ranking
-- **THEN** the dashboard labels it "Contribution ranking" and explains that, because duration is raw wall-clock, it is directional rather than an absolute performance judgment
 
 ### Requirement: Per-project context section
 The system SHALL provide a per-project context section in the dashboard where the project's knowledge hub overview is viewable.

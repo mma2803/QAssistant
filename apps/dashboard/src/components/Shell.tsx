@@ -18,6 +18,7 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
         <nav>
           <NavLink to="/sessions">Recordings</NavLink>
           <NavLink to="/projects">Project context</NavLink>
+          <NavLink to="/settings">Settings</NavLink>
           {isAdmin && <NavLink to="/metrics">Productivity</NavLink>}
           {isAdmin && <NavLink to="/users">Users</NavLink>}
         </nav>

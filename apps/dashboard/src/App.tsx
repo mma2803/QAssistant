@@ -7,6 +7,7 @@ import { SessionsPage } from './pages/SessionsPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
 import { MetricsPage } from './pages/MetricsPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { UsersPage } from './pages/UsersPage';
 
 /**
@@ -48,6 +49,7 @@ export function App(): JSX.Element {
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         {isAdmin && <Route path="/metrics" element={<MetricsPage />} />}
         {isAdmin && <Route path="/users" element={<UsersPage />} />}
         <Route path="*" element={<Navigate to="/sessions" replace />} />

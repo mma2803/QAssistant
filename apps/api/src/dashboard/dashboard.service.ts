@@ -313,7 +313,9 @@ export class DashboardService {
   /**
    * GET /dashboard/metrics: per-active-user productivity metrics (contract 6).
    * Admin only (controller-enforced). Over non-soft-deleted sessions:
-   *   generatedTestCount = playwright_test generations for the user's sessions
+   *   generatedTestCount = real (asserted) test generations for the user's
+   *     sessions, counted across ALL frameworks (kind distinguishes a real test
+   *     from a quick replay script; the target framework is orthogonal)
    *   totalRecordingSeconds = SUM(ended_at - started_at), raw wall-clock
    *   recordingCount = completed sessions
    */
@@ -340,8 +342,9 @@ export class DashboardService {
   /**
    * Shared metric computation, one row per active tenant user. Recording
    * aggregates use raw wall-clock duration (no idle exclusion in MVP) over
-   * completed, non-soft-deleted sessions. generatedTestCount counts
-   * playwright_test versions on those sessions.
+   * completed, non-soft-deleted sessions. generatedTestCount counts real
+   * asserted-test versions (kind=playwright_test) on those sessions, across all
+   * target frameworks.
    */
   private async computeMetrics(): Promise<UserMetric[]> {
     const tenantId = this.requireTenant();
@@ -376,6 +379,8 @@ export class DashboardService {
           WHERE s.recorded_by = ${metricUserId}
             AND s.tenant_id = ${tenantId}
             AND s.deleted_at IS NULL
+            -- 'playwright_test' = real asserted test (vs 'replay_script'); this
+            -- is the test KIND, not the framework, so it counts every framework.
             AND gt.kind = 'playwright_test'
         ), 0)::int`,
       })

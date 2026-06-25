@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { GeneratedTest } from '@qassistant/shared';
+import type { GeneratedTest, GenerateRequest } from '@qassistant/shared';
+import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 import { api, saveBlob } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
 import { ReplayPlayer } from '../components/ReplayPlayer';
@@ -145,12 +146,12 @@ export function SessionDetailPage(): JSX.Element {
         onComment={(body, generatedTestId) =>
           withBusy('comment', () => api.addComment(sessionId, { body, generatedTestId }))
         }
-        onRegenerate={(sourceCommentId) =>
+        onRegenerate={(sourceCommentId, override) =>
           withBusy('regen', () =>
-            api.regenerate(sessionId, { kind: 'playwright_test', sourceCommentId }),
+            api.regenerate(sessionId, { kind: 'playwright_test', sourceCommentId, ...override }),
           )
         }
-        onGenerate={() => withBusy('gen', () => api.generate(sessionId))}
+        onGenerate={(override) => withBusy('gen', () => api.generate(sessionId, override))}
       />
     </div>
   );
@@ -175,8 +176,8 @@ interface GenSectionProps {
   onApprove: (id: string) => void;
   onIntegrate: (id: string) => void;
   onComment: (body: string, generatedTestId?: string) => Promise<void>;
-  onRegenerate: (sourceCommentId?: string) => Promise<void>;
-  onGenerate: () => Promise<void>;
+  onRegenerate: (sourceCommentId?: string, override?: Partial<GenerateRequest>) => Promise<void>;
+  onGenerate: (override?: Partial<GenerateRequest>) => Promise<void>;
 }
 
 /** Generated versions with approve/integrate, plus a comment + regenerate flow. */
@@ -185,17 +186,75 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
   const [comment, setComment] = useState('');
   const [target, setTarget] = useState<string>('');
 
+  // Per-generation framework/language selector. '' = use the tenant default
+  // (no override sent), '0'..'N' = a preset, 'custom' = the free-form entry.
+  // Choosing here only affects this generation; it never changes the tenant default.
+  const settings = useAsync(() => api.getTenantSettings(), []);
+  const [fwChoice, setFwChoice] = useState<string>('');
+  const [customFw, setCustomFw] = useState('');
+  const [customLang, setCustomLang] = useState('');
+
+  const customIncomplete = fwChoice === 'custom' && !(customFw.trim() && customLang.trim());
+
+  function selectedOverride(): Partial<GenerateRequest> | undefined {
+    if (fwChoice === '') return undefined; // fall back to tenant default
+    if (fwChoice === 'custom') {
+      const framework = customFw.trim();
+      const language = customLang.trim();
+      return framework && language ? { framework, language } : undefined;
+    }
+    const preset = TEST_FRAMEWORK_PRESETS[Number(fwChoice)];
+    return preset ? { framework: preset.framework, language: preset.language } : undefined;
+  }
+
+  const tenantDefaultLabel = settings.data
+    ? `${settings.data.defaultTestFramework} / ${settings.data.defaultTestLanguage}`
+    : 'tenant default';
+
   return (
     <div className="card col">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <h3 style={{ margin: 0 }}>Generated tests</h3>
-        <button
-          className="primary"
-          disabled={busyId === 'gen'}
-          onClick={() => void props.onGenerate()}
-        >
-          {busyId === 'gen' ? 'Queuing...' : 'Generate'}
-        </button>
+        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            aria-label="Test framework"
+            value={fwChoice}
+            onChange={(e) => setFwChoice(e.target.value)}
+          >
+            <option value="">Tenant default ({tenantDefaultLabel})</option>
+            {TEST_FRAMEWORK_PRESETS.map((p, i) => (
+              <option key={`${p.framework}-${p.language}`} value={String(i)}>
+                {p.framework} / {p.language}
+              </option>
+            ))}
+            <option value="custom">Custom…</option>
+          </select>
+          {fwChoice === 'custom' && (
+            <>
+              <input
+                aria-label="Custom framework"
+                value={customFw}
+                onChange={(e) => setCustomFw(e.target.value)}
+                placeholder="Framework"
+                style={{ width: 120 }}
+              />
+              <input
+                aria-label="Custom language"
+                value={customLang}
+                onChange={(e) => setCustomLang(e.target.value)}
+                placeholder="Language"
+                style={{ width: 120 }}
+              />
+            </>
+          )}
+          <button
+            className="primary"
+            disabled={busyId === 'gen' || customIncomplete}
+            onClick={() => void props.onGenerate(selectedOverride())}
+          >
+            {busyId === 'gen' ? 'Queuing...' : 'Generate'}
+          </button>
+        </div>
       </div>
 
       {generations.length === 0 ? (
@@ -211,6 +270,7 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
                   <strong>v{g.version}</strong>
                   <span className="badge">{g.kind}</span>
                   <span className="badge">{g.modelTier}</span>
+                  <span className="badge">{g.framework} / {g.language}</span>
                   <span className={`badge ${g.reviewStatus}`}>{g.reviewStatus}</span>
                   {g.integrated && <span className="badge integrated">integrated</span>}
                 </div>
@@ -285,8 +345,8 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
           </button>
           <button
             className="primary"
-            disabled={busyId === 'regen'}
-            onClick={() => void props.onRegenerate(undefined)}
+            disabled={busyId === 'regen' || customIncomplete}
+            onClick={() => void props.onRegenerate(undefined, selectedOverride())}
           >
             {busyId === 'regen' ? 'Queuing...' : 'Regenerate with comments'}
           </button>

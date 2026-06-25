@@ -18,14 +18,14 @@
 
 ## 4. Dashboard
 
-- [ ] 4.1 Add the framework/language selector next to the Generate button: 5 predefined options + free-form custom entry, defaulting to the tenant default
-- [ ] 4.2 Wire per-generation override into the generate request without mutating the tenant default
-- [ ] 4.3 Add a control (open to any tenant user) to view/change the tenant default framework/language
-- [ ] 4.4 Display the framework/language on each generated test version
+- [x] 4.1 Add the framework/language selector next to the Generate button: 5 predefined options + free-form custom entry, defaulting to the tenant default
+- [x] 4.2 Wire per-generation override into the generate request without mutating the tenant default
+- [x] 4.3 Add a control (open to any tenant user) to view/change the tenant default framework/language
+- [x] 4.4 Display the framework/language on each generated test version
 
 ## 5. Productivity ranking
 
-- [ ] 5.1 Update the ranking query/label to count generated tests across all frameworks (remove "Playwright" wording)
+- [x] 5.1 Update the ranking query/label to count generated tests across all frameworks (remove "Playwright" wording)
 
 ## 6. Verification
 

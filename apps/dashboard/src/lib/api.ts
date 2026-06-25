@@ -19,6 +19,9 @@ import type {
   ResetPasswordRequest,
   CreateCommentRequest,
   RegenerateRequest,
+  GenerateRequest,
+  TenantSettingsResponse,
+  UpdateTenantSettingsRequest,
   ErrorEnvelope,
 } from '@qassistant/shared';
 import { getIdToken } from './firebase';
@@ -176,8 +179,18 @@ export const api = {
     request<GenerationComment>('POST', `/sessions/${sessionId}/comments`, body),
   regenerate: (sessionId: string, body: RegenerateRequest) =>
     request<JobResponse>('POST', `/sessions/${sessionId}/regenerate`, body),
-  generate: (sessionId: string) =>
-    request<JobResponse>('POST', `/sessions/${sessionId}/generate`, { kind: 'playwright_test' }),
+  // body carries an optional per-generation framework/language override; when
+  // omitted the backend falls back to the tenant default.
+  generate: (sessionId: string, body: Partial<GenerateRequest> = {}) =>
+    request<JobResponse>('POST', `/sessions/${sessionId}/generate`, {
+      kind: 'playwright_test',
+      ...body,
+    }),
+
+  // --- tenant settings (configurable-test-framework; any tenant user) ---
+  getTenantSettings: () => request<TenantSettingsResponse>('GET', '/tenant/settings'),
+  setTenantSettings: (body: UpdateTenantSettingsRequest) =>
+    request<TenantSettingsResponse>('PUT', '/tenant/settings', body),
 
   // --- user management (4.2, admin) ---
   listUsers: () => request<TenantUser[]>('GET', '/users'),

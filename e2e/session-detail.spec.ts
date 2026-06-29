@@ -16,8 +16,11 @@ test('reviews a recording and exercises the code-generation workflow', async ({ 
 
   await page.getByRole('button', { name: 'Approve' }).click();
   await expect(page.getByText('approved', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ready to integrate', { exact: true })).toBeVisible();
+  // Integration prompts for the commit/PR URL; the client supplies it.
+  page.once('dialog', (dialog) => void dialog.accept('https://github.com/acme/e2e-tests/commit/abc123'));
   await page.getByRole('button', { name: 'Integrate' }).click();
-  await expect(page.getByText('integrated', { exact: true })).toBeVisible();
+  await expect(page.getByText('Integrated', { exact: true })).toBeVisible();
 
   await page.getByLabel('Comment to steer the next generation').fill('Use the visible receipt number.');
   await page.getByLabel('Target version (optional)').selectOption(ids.generation);

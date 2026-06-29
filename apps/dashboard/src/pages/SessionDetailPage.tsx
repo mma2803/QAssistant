@@ -6,7 +6,7 @@ import { api, saveBlob } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
 import { ReplayPlayer } from '../components/ReplayPlayer';
 import { AuthImage } from '../components/AuthImage';
-import { formatDateTime, formatDuration } from '../lib/format';
+import { formatDateTime, formatDuration, integrationStatusLabel } from '../lib/format';
 
 /**
  * Recording detail (spec 5.2): rrweb DOM-replay, screenshots, flags/selections,
@@ -143,7 +143,6 @@ export function SessionDetailPage(): JSX.Element {
         comments={comments}
         busyId={busyId}
         onApprove={(id) => void withBusy(id, () => api.approveGeneration(id))}
-        onIntegrate={(id) => void withBusy(id, () => api.integrateGeneration(id))}
         onComment={(body, generatedTestId) =>
           withBusy('comment', () => api.addComment(sessionId, { body, generatedTestId }))
         }
@@ -176,13 +175,16 @@ interface GenSectionProps {
   comments: { id: string; body: string; generatedTestId: string | null; createdAt: string }[];
   busyId: string | null;
   onApprove: (id: string) => void;
-  onIntegrate: (id: string) => void;
   onComment: (body: string, generatedTestId?: string) => Promise<void>;
   onRegenerate: (sourceCommentId?: string, override?: Partial<GenerateRequest>) => Promise<void>;
   onGenerate: (override?: Partial<GenerateRequest>) => Promise<void>;
 }
 
-/** Generated versions with approve/integrate, plus a comment + regenerate flow. */
+/**
+ * Generated versions with approve + a comment/regenerate flow. Integration is
+ * read-only here: status/ref/error are displayed but only the MCP client (which
+ * owns the Git push) sets an integration outcome — there is no integrate action.
+ */
 function GenerationsSection(props: GenSectionProps): JSX.Element {
   const { generations, comments, busyId } = props;
   const [comment, setComment] = useState('');
@@ -275,27 +277,42 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <div className="row">
                   <strong>v{g.version}</strong>
-                  <span className="badge">{g.kind}</span>
                   <span className="badge">{g.modelTier}</span>
                   <span className="badge">{g.framework} / {g.language}</span>
                   <span className={`badge ${g.reviewStatus}`}>{g.reviewStatus}</span>
-                  {g.integrated && <span className="badge integrated">integrated</span>}
+                  {g.integrationStatus !== 'not_ready' && (
+                    <span className={`badge ${g.integrationStatus}`}>
+                      {integrationStatusLabel(g.integrationStatus)}
+                    </span>
+                  )}
                 </div>
                 <div className="row">
                   <button
-                    disabled={busyId === g.id || g.reviewStatus === 'approved'}
+                    // A failed_to_integrate version stays approved but is a
+                    // dead-end until reset; allow re-approving it (back to
+                    // ready_to_integrate) so the integration can be retried via
+                    // the MCP client. Other approved versions stay disabled.
+                    disabled={
+                      busyId === g.id ||
+                      (g.reviewStatus === 'approved' &&
+                        g.integrationStatus !== 'failed_to_integrate')
+                    }
                     onClick={() => props.onApprove(g.id)}
                   >
-                    Approve
-                  </button>
-                  <button
-                    disabled={busyId === g.id || g.integrated}
-                    onClick={() => props.onIntegrate(g.id)}
-                  >
-                    Integrate
+                    {g.integrationStatus === 'failed_to_integrate' ? 'Re-approve (retry)' : 'Approve'}
                   </button>
                 </div>
               </div>
+              {g.integrationRef && (
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Integration ref: {g.integrationRef}
+                </div>
+              )}
+              {g.integrationError && (
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Integration error: {g.integrationError}
+                </div>
+              )}
               {g.promptInputsSummary?.sources?.length > 0 && (
                 <div className="muted" style={{ fontSize: 12 }}>
                   Sources: {g.promptInputsSummary.sources.map((s) => s.label).join(', ')}

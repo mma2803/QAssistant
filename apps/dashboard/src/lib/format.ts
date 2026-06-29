@@ -15,3 +15,19 @@ export function formatDateTime(iso: string | null | undefined): string {
   const d = new Date(iso);
   return d.toLocaleString();
 }
+
+/** Human label for a generated test's integration status. */
+export function integrationStatusLabel(status: string): string {
+  switch (status) {
+    case 'ready_to_integrate':
+      return 'Ready to integrate';
+    case 'integrated':
+      return 'Integrated';
+    case 'failed_to_integrate':
+      return 'Failed';
+    case 'not_ready':
+      return 'Not ready';
+    default:
+      return status;
+  }
+}

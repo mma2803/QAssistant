@@ -4,7 +4,7 @@ import type { Project, SessionStatus } from '@qassistant/shared';
 import { api, saveBlob } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../auth/AuthContext';
-import { formatDateTime, formatDuration } from '../lib/format';
+import { formatDateTime, formatDuration, integrationStatusLabel } from '../lib/format';
 
 /**
  * Recording / artifact browser (spec 5.2 admin; 5.3 qa-engineer restricted to
@@ -86,6 +86,7 @@ export function SessionsPage(): JSX.Element {
                 <th>Started</th>
                 <th>Duration</th>
                 <th>Tests</th>
+                <th>Integration</th>
                 <th></th>
               </tr>
             </thead>
@@ -106,6 +107,15 @@ export function SessionsPage(): JSX.Element {
                   <td className="muted">{formatDateTime(s.startedAt)}</td>
                   <td>{formatDuration(s.durationSeconds)}</td>
                   <td>{s.generatedTestCount}</td>
+                  <td>
+                    {s.integrationStatus ? (
+                      <span className={`badge ${s.integrationStatus}`}>
+                        {integrationStatusLabel(s.integrationStatus)}
+                      </span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
                   <td>
                     <div className="row">
                       <Link to={`/sessions/${s.id}`}>Open</Link>

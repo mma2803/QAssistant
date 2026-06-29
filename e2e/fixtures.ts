@@ -82,7 +82,9 @@ export const generation = {
   reviewStatus: 'pending',
   approvedBy: null,
   approvedAt: null,
-  integrated: false,
+  integrationStatus: 'not_ready',
+  integrationRef: null,
+  integrationError: null,
   integratedBy: null,
   integratedAt: null,
   promptInputsSummary: { sources: [{ label: 'QA-42', kind: 'jira' }] },
@@ -201,11 +203,13 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
       return json(route, { items: [currentGeneration] });
     }
     if (method === 'POST' && url.pathname === `/api/v1/generations/${ids.generation}/approve`) {
-      currentGeneration = { ...currentGeneration, reviewStatus: 'approved', approvedBy: ids.admin, approvedAt: now };
+      // Approval makes the version the session's ready_to_integrate candidate.
+      currentGeneration = { ...currentGeneration, reviewStatus: 'approved', approvedBy: ids.admin, approvedAt: now, integrationStatus: 'ready_to_integrate' };
       return json(route, currentGeneration);
     }
     if (method === 'POST' && url.pathname === `/api/v1/generations/${ids.generation}/integrate`) {
-      currentGeneration = { ...currentGeneration, integrated: true, integratedBy: ids.admin, integratedAt: now };
+      const ref = body && typeof body === 'object' && 'ref' in body ? (body as { ref?: string }).ref ?? null : null;
+      currentGeneration = { ...currentGeneration, integrationStatus: 'integrated', integrationRef: ref, integratedBy: ids.admin, integratedAt: now };
       return json(route, currentGeneration);
     }
     if (method === 'POST' && url.pathname === `/api/v1/sessions/${ids.session}/comments`) {

@@ -90,7 +90,7 @@ export class CodegenWorkerService {
         framework: payload.framework,
         language: payload.language,
         reviewStatus: 'draft',
-        integrated: false,
+        integrationStatus: 'not_ready',
         promptInputsSummary: summary,
         sourceCommentId: payload.sourceCommentId ?? null,
         createdBy: payload.createdBy,

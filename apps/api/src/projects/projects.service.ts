@@ -10,6 +10,7 @@ import type {
   Project,
   JiraConfig,
 } from '@qassistant/shared';
+import { DEFAULT_PROJECT_KNOWLEDGE_MD } from '@qassistant/shared';
 import { RequestContext } from '../auth/request-context.js';
 import { AppException } from '../auth/errors.js';
 import { jiraConfigs, projects } from '../db/schema.js';
@@ -73,6 +74,10 @@ export class ProjectsService {
         name: input.name,
         baseUrl: input.baseUrl,
         status: 'active',
+        // Seed the knowledge hub with the default guidance template so the
+        // project's first generations are biased toward robust tests. Admins
+        // can edit or clear it afterwards via setKnowledge.
+        knowledgeMd: DEFAULT_PROJECT_KNOWLEDGE_MD,
         screenshotDefault: input.screenshotDefault,
         maskingSelectors: input.maskingSelectors,
         inactivityTimeoutSeconds: input.inactivityTimeoutSeconds,

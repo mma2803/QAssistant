@@ -14,10 +14,12 @@ import {
   regenerateRequestSchema,
   createCommentRequestSchema,
   generateTaskPayloadSchema,
+  updateIntegrationStatusRequestSchema,
   type GenerateRequest,
   type RegenerateRequest,
   type CreateCommentRequest,
   type GenerateTaskPayload,
+  type UpdateIntegrationStatusRequest,
   type JobResponse,
   type GeneratedTest,
   type GenerationComment,
@@ -83,6 +85,19 @@ export class CodegenController {
     return { items };
   }
 
+  /**
+   * GET /generations/ready-to-integrate: list this tenant's approved versions
+   * whose integration status is ready_to_integrate (candidates for repo
+   * integration by an MCP client). Declared before the `:generatedTestId` route
+   * so the static path is not captured as an id param.
+   */
+  @Get('generations/ready-to-integrate')
+  @Roles('admin', 'qa-engineer')
+  async listReadyToIntegrate(): Promise<GenerationsListResponse> {
+    const items = await this.codegen.listReadyToIntegrate();
+    return { items };
+  }
+
   @Get('generations/:generatedTestId')
   @Roles('admin', 'qa-engineer')
   getGeneration(
@@ -99,8 +114,12 @@ export class CodegenController {
 
   @Post('generations/:generatedTestId/integrate')
   @Roles('admin', 'qa-engineer')
-  integrate(@Param('generatedTestId') generatedTestId: string): Promise<GeneratedTest> {
-    return this.codegen.integrate(generatedTestId);
+  integrate(
+    @Param('generatedTestId') generatedTestId: string,
+    @Body(new ZodValidationPipe(updateIntegrationStatusRequestSchema))
+    body: UpdateIntegrationStatusRequest,
+  ): Promise<GeneratedTest> {
+    return this.codegen.integrate(generatedTestId, body);
   }
 
   /**

@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, ne } from 'drizzle-orm';
 import type {
   GenerateRequest,
   RegenerateRequest,
@@ -8,6 +8,7 @@ import type {
   JobResponse,
   GeneratedTest,
   GenerationComment,
+  UpdateIntegrationStatusRequest,
 } from '@qassistant/shared';
 import type { ModelTier } from '@qassistant/shared/enums';
 import { DEFAULT_TEST_FRAMEWORK, DEFAULT_TEST_LANGUAGE } from '@qassistant/shared/enums';
@@ -231,19 +232,73 @@ export class CodegenService {
   }
 
   /**
+   * GET /generations/ready-to-integrate: this tenant's versions whose
+   * integration status is ready_to_integrate. RLS already scopes rows to the
+   * tenant; the explicit tenant_id predicate is kept for defence in depth.
+   */
+  async listReadyToIntegrate(): Promise<GeneratedTest[]> {
+    const tenantId = this.requireTenant();
+    const rows = await this.ctx.dbTx
+      .select()
+      .from(generatedTests)
+      .where(
+        and(
+          eq(generatedTests.tenantId, tenantId),
+          eq(generatedTests.integrationStatus, 'ready_to_integrate'),
+        ),
+      )
+      .orderBy(asc(generatedTests.updatedAt));
+    return rows.map(toGeneratedTest);
+  }
+
+  /**
    * POST /generations/{id}/approve: mark review_status=approved; record
    * approved_by/at. Any tenant user may approve (contract 4.5).
    */
   async approve(generatedTestId: string): Promise<GeneratedTest> {
     const tenantId = this.requireTenant();
     const approver = this.requireActingUser();
-    await this.loadGenerationRow(generatedTestId);
+    const current = await this.loadGenerationRow(generatedTestId);
+
+    // A session has at most one approved version. Demote any other version of
+    // the same session that is still ready_to_integrate back to not_ready, so a
+    // superseded version can never be integrated.
+    await this.ctx.dbTx
+      .update(generatedTests)
+      .set({ integrationStatus: 'not_ready', updatedAt: new Date() })
+      .where(
+        and(
+          eq(generatedTests.tenantId, tenantId),
+          eq(generatedTests.sessionId, current.sessionId),
+          eq(generatedTests.integrationStatus, 'ready_to_integrate'),
+          ne(generatedTests.id, generatedTestId),
+        ),
+      );
+
+    // Mark every other version of the session superseded: only the version
+    // being approved stays active. Versions already integrated/failed keep their
+    // integration_status (set above only touches ready_to_integrate), so their
+    // history is preserved while review_status reflects they are no longer live.
+    await this.ctx.dbTx
+      .update(generatedTests)
+      .set({ reviewStatus: 'superseded', updatedAt: new Date() })
+      .where(
+        and(
+          eq(generatedTests.tenantId, tenantId),
+          eq(generatedTests.sessionId, current.sessionId),
+          ne(generatedTests.id, generatedTestId),
+        ),
+      );
+
+    // Approving makes this version the session's ready_to_integrate candidate.
+    // Approving a previously superseded version simply reactivates it here.
     const [row] = await this.ctx.dbTx
       .update(generatedTests)
       .set({
         reviewStatus: 'approved',
         approvedBy: approver,
         approvedAt: new Date(),
+        integrationStatus: 'ready_to_integrate',
         updatedAt: new Date(),
       })
       .where(and(eq(generatedTests.id, generatedTestId), eq(generatedTests.tenantId, tenantId)))
@@ -252,17 +307,32 @@ export class CodegenService {
   }
 
   /**
-   * POST /generations/{id}/integrate: set integrated=true; record
-   * integrated_by/at. A manual flag (D8a): no proof of repo integration required.
+   * POST /generations/{id}/integrate: an MCP client reports the outcome of
+   * pushing a ready_to_integrate version. Records integration_status
+   * (integrated | failed_to_integrate) with the repo ref or error message, plus
+   * integrated_by/at. The transition is only valid from ready_to_integrate;
+   * QAssistant never pushes to Git (no proof of repo integration is required).
    */
-  async integrate(generatedTestId: string): Promise<GeneratedTest> {
+  async integrate(
+    generatedTestId: string,
+    input: UpdateIntegrationStatusRequest,
+  ): Promise<GeneratedTest> {
     const tenantId = this.requireTenant();
     const actor = this.requireActingUser();
-    await this.loadGenerationRow(generatedTestId);
+    const current = await this.loadGenerationRow(generatedTestId);
+    if (current.integrationStatus !== 'ready_to_integrate') {
+      throw new AppException(
+        'conflict',
+        'Only a ready_to_integrate version can be marked integrated or failed_to_integrate',
+        HttpStatus.CONFLICT,
+      );
+    }
     const [row] = await this.ctx.dbTx
       .update(generatedTests)
       .set({
-        integrated: true,
+        integrationStatus: input.status,
+        integrationRef: input.status === 'integrated' ? input.ref! : null,
+        integrationError: input.status === 'failed_to_integrate' ? input.error! : null,
         integratedBy: actor,
         integratedAt: new Date(),
         updatedAt: new Date(),

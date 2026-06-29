@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { uuid, isoTimestamp, paginationQuerySchema, paginated } from '../common.js';
-import { SESSION_STATUSES } from '../enums.js';
+import { SESSION_STATUSES, INTEGRATION_STATUSES } from '../enums.js';
 import {
   sessionSchema,
   artifactSchema,
@@ -37,6 +37,10 @@ export const dashboardSessionListItemSchema = sessionSchema.extend({
   recordedByEmail: z.string().email().nullable(),
   durationSeconds: z.number().nonnegative().nullable(),
   generatedTestCount: z.number().int().nonnegative(),
+  // Derived integration status of the session's candidate version (the approved
+  // `ready_to_integrate` version, or the latest integrated/failed one). `null`
+  // means no version is a candidate yet (rendered as "—" in the records list).
+  integrationStatus: z.enum(INTEGRATION_STATUSES).nullable(),
 });
 export type DashboardSessionListItem = z.infer<typeof dashboardSessionListItemSchema>;
 

@@ -35,6 +35,29 @@ export type GenerationsListResponse = z.infer<typeof generationsListResponseSche
 /** POST /generations/{id}/approve and /integrate responses: the updated version. */
 export const generationResponseSchema = generatedTestSchema;
 
+/**
+ * POST /generations/{id}/integrate body: an MCP client reports the outcome of
+ * pushing a `ready_to_integrate` version to the team's repo. `integrated`
+ * requires a repo reference (commit or PR URL); `failed_to_integrate` requires
+ * an error message (e.g. "target repository not found"). QAssistant stores the
+ * report; it never performs the Git push itself.
+ */
+export const updateIntegrationStatusRequestSchema = z
+  .object({
+    status: z.enum(['integrated', 'failed_to_integrate']),
+    ref: z.string().min(1).optional(),
+    error: z.string().min(1).optional(),
+  })
+  .refine((v) => v.status !== 'integrated' || !!v.ref, {
+    message: 'ref (commit or PR URL) is required when status is integrated',
+    path: ['ref'],
+  })
+  .refine((v) => v.status !== 'failed_to_integrate' || !!v.error, {
+    message: 'error message is required when status is failed_to_integrate',
+    path: ['error'],
+  });
+export type UpdateIntegrationStatusRequest = z.infer<typeof updateIntegrationStatusRequestSchema>;
+
 /** POST /sessions/{sessionId}/comments */
 export const createCommentRequestSchema = z.object({
   body: nonEmptyString,

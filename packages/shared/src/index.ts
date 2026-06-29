@@ -8,4 +8,5 @@
 export * from './enums.js';
 export * from './common.js';
 export * from './entities.js';
+export * from './knowledge.js';
 export * from './dto/index.js';

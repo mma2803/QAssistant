@@ -3,6 +3,7 @@ import type {
   GeneratedTestKind,
   ModelTier,
   ReviewStatus,
+  IntegrationStatus,
 } from '@qassistant/shared/enums';
 import type { generatedTests, generationComments } from '../db/schema.js';
 
@@ -38,7 +39,9 @@ export function toGeneratedTest(row: GeneratedTestRow): GeneratedTest {
     reviewStatus: row.reviewStatus as ReviewStatus,
     approvedBy: row.approvedBy,
     approvedAt: isoOrNull(row.approvedAt),
-    integrated: row.integrated,
+    integrationStatus: row.integrationStatus as IntegrationStatus,
+    integrationRef: row.integrationRef,
+    integrationError: row.integrationError,
     integratedBy: row.integratedBy,
     integratedAt: isoOrNull(row.integratedAt),
     promptInputsSummary: row.promptInputsSummary as PromptInputsSummary,

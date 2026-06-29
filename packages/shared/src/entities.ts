@@ -13,6 +13,7 @@ import {
   GENERATED_TEST_KINDS,
   MODEL_TIERS,
   REVIEW_STATUSES,
+  INTEGRATION_STATUSES,
 } from './enums.js';
 
 /**
@@ -161,7 +162,11 @@ export const generatedTestSchema = z.object({
   reviewStatus: z.enum(REVIEW_STATUSES),
   approvedBy: uuid.nullable(),
   approvedAt: isoTimestamp.nullable(),
-  integrated: z.boolean(),
+  integrationStatus: z.enum(INTEGRATION_STATUSES),
+  // Repo reference (commit or PR URL) supplied by the MCP client on success.
+  integrationRef: z.string().nullable(),
+  // Error message supplied by the MCP client when integration failed.
+  integrationError: z.string().nullable(),
   integratedBy: uuid.nullable(),
   integratedAt: isoTimestamp.nullable(),
   promptInputsSummary: promptInputsSummarySchema,

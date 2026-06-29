@@ -24,6 +24,7 @@ The bootstrap uses the active Google account through `gcloud`. It can create/sel
 apps/api/                NestJS backend API (Drizzle + RLS); tests in apps/api/test
 apps/dashboard/          React + Vite dashboard SPA
 apps/extension/          Chrome MV3 extension (Vite + @crxjs, rrweb capture)
+apps/mcp/                MCP server (stdio): exposes records + generated code to MCP clients, records integration outcomes; never pushes to Git
 packages/shared/         Shared zod schemas, enum constants, and inferred types
 infra/terraform/         GCP managed-service stack
 infra/local/             docker-compose emulator config (postgres roles, firebase, gcs)

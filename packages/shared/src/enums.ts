@@ -44,8 +44,28 @@ export type GeneratedTestKind = (typeof GENERATED_TEST_KINDS)[number];
 export const MODEL_TIERS = ['flash', 'pro'] as const;
 export type ModelTier = (typeof MODEL_TIERS)[number];
 
-export const REVIEW_STATUSES = ['draft', 'approved'] as const;
+/**
+ * Review lifecycle of a generated test version. `superseded` marks a version
+ * that is no longer the session's active candidate because a different version
+ * was approved; at most one version per session is `approved` at a time.
+ */
+export const REVIEW_STATUSES = ['draft', 'approved', 'superseded'] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+
+/**
+ * Integration lifecycle of a generated test version. Replaces the legacy boolean
+ * `integrated` flag. A version starts `not_ready`, becomes `ready_to_integrate`
+ * automatically on approval (one candidate per session), and is reported
+ * `integrated` (with a repo ref) or `failed_to_integrate` (with an error message)
+ * by an MCP client after it pushes the code. QAssistant never pushes to Git.
+ */
+export const INTEGRATION_STATUSES = [
+  'not_ready',
+  'ready_to_integrate',
+  'integrated',
+  'failed_to_integrate',
+] as const;
+export type IntegrationStatus = (typeof INTEGRATION_STATUSES)[number];
 
 /**
  * Predefined framework/language options offered in the dashboard's "Generate"

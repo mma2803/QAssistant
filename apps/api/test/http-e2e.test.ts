@@ -494,12 +494,28 @@ describe('HTTP REST surface', () => {
     );
     assert.equal(approved.status, 201);
     assert.equal(approved.body.reviewStatus, 'approved');
-    const integrated = await request<{ integrated: boolean }>(
+
+    // Approval makes the version a ready_to_integrate candidate the MCP server lists.
+    const ready = await request<{ items: Array<{ id: string; integrationStatus: string }> }>(
+      '/api/v1/generations/ready-to-integrate',
+      { token: adminToken },
+    );
+    assert.equal(ready.status, 200);
+    assert.ok(
+      ready.body.items.some(
+        (g) => g.id === generatedTestId && g.integrationStatus === 'ready_to_integrate',
+      ),
+      'approved version is listed as ready_to_integrate',
+    );
+
+    const ref = 'https://github.com/acme/e2e-tests/pull/7';
+    const integrated = await request<{ integrationStatus: string; integrationRef: string | null }>(
       `/api/v1/generations/${generatedTestId}/integrate`,
-      { method: 'POST', token: adminToken },
+      { method: 'POST', token: adminToken, body: { status: 'integrated', ref } },
     );
     assert.equal(integrated.status, 201);
-    assert.equal(integrated.body.integrated, true);
+    assert.equal(integrated.body.integrationStatus, 'integrated');
+    assert.equal(integrated.body.integrationRef, ref);
 
     const comment = await request<{ id: string }>(`/api/v1/sessions/${sessionId}/comments`, {
       method: 'POST',

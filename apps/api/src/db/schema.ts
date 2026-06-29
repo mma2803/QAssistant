@@ -39,6 +39,7 @@ import {
   GENERATED_TEST_KINDS,
   MODEL_TIERS,
   REVIEW_STATUSES,
+  INTEGRATION_STATUSES,
 } from '@qassistant/shared/enums';
 
 /** Build a SQL `col IN ('a','b')` CHECK predicate from an allowed-values tuple. */
@@ -313,7 +314,11 @@ export const generatedTests = pgTable(
     reviewStatus: text('review_status').notNull().default('draft'),
     approvedBy: uuid('approved_by').references(() => tenantUsers.id, { onDelete: 'restrict' }),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
-    integrated: boolean('integrated').notNull().default(false),
+    // Integration lifecycle (replaces the legacy boolean `integrated`). See
+    // INTEGRATION_STATUSES. ref/error are filled by the MCP client report.
+    integrationStatus: text('integration_status').notNull().default('not_ready'),
+    integrationRef: text('integration_ref'),
+    integrationError: text('integration_error'),
     integratedBy: uuid('integrated_by').references(() => tenantUsers.id, { onDelete: 'restrict' }),
     integratedAt: timestamp('integrated_at', { withTimezone: true }),
     promptInputsSummary: jsonb('prompt_inputs_summary').notNull(),
@@ -343,6 +348,10 @@ export const generatedTests = pgTable(
     reviewStatusCheck: check(
       'generated_tests_review_status_check',
       inList('review_status', REVIEW_STATUSES),
+    ),
+    integrationStatusCheck: check(
+      'generated_tests_integration_status_check',
+      inList('integration_status', INTEGRATION_STATUSES),
     ),
   }),
 );

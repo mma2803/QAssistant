@@ -42,6 +42,7 @@ import { ProjectsService } from '../src/projects/projects.service.js';
 import { CaptureService } from '../src/capture/capture.service.js';
 import { CodegenService } from '../src/codegen/codegen.service.js';
 import { TenantSettingsService } from '../src/tenant-settings/tenant-settings.service.js';
+import { DEFAULT_PROJECT_KNOWLEDGE_MD } from '@qassistant/shared';
 import { DashboardService } from '../src/dashboard/dashboard.service.js';
 import { JiraValidationService } from '../src/jira/jira-validation.service.js';
 import { artifactObjectPath } from '../src/storage/gcs-signer.service.js';
@@ -214,6 +215,8 @@ describe('end-to-end MVP flow (service layer)', () => {
     projectId = project.id;
     assert.equal(project.status, 'active');
     assert.equal(project.baseUrl, 'https://checkout.acme.test');
+    // A new project is seeded with the default knowledge guidance template.
+    assert.equal(project.knowledgeMd, DEFAULT_PROJECT_KNOWLEDGE_MD);
   });
 
   it('5. qa-engineer starts a project + work-context-gated session', async (t) => {
@@ -341,6 +344,11 @@ describe('end-to-end MVP flow (service layer)', () => {
     });
     assert.equal(approved.reviewStatus, 'approved');
     assert.equal(approved.approvedBy, admin.actingUserId, 'approver recorded');
+    assert.equal(
+      approved.integrationStatus,
+      'ready_to_integrate',
+      'approval makes the version the integration candidate',
+    );
   });
 
   it('9. dashboard reads: admin tenant-wide, owner sees own, other qa denied', async (t) => {
@@ -574,15 +582,121 @@ describe('end-to-end MVP flow (service layer)', () => {
     );
   });
 
-  it('22. integration records the acting user and timestamp', async (t) => {
+  it('22. integration records status, ref, acting user and timestamp', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
+    const ref = 'https://github.com/acme/e2e-tests/commit/abc123';
     const integrated = await h.asTenant(qa, async (ctx) => {
       const codegen = new CodegenService(ctx, h!.dispatcher);
-      return codegen.integrate(generatedTestId);
+      return codegen.integrate(generatedTestId, { status: 'integrated', ref });
     });
-    assert.equal(integrated.integrated, true);
+    assert.equal(integrated.integrationStatus, 'integrated');
+    assert.equal(integrated.integrationRef, ref);
     assert.equal(integrated.integratedBy, qa.actingUserId);
     assert.ok(integrated.integratedAt);
+  });
+
+  it('22b. integrate is rejected when the version is not ready_to_integrate', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    // generatedTestId is now `integrated`, so a second integrate must conflict.
+    await assert.rejects(
+      h.asTenant(qa, async (ctx) => {
+        const codegen = new CodegenService(ctx, h!.dispatcher);
+        return codegen.integrate(generatedTestId, {
+          status: 'failed_to_integrate',
+          error: 'target repository not found',
+        });
+      }),
+      /ready_to_integrate/,
+    );
+  });
+
+  it('22c. only one version per session stays ready_to_integrate after re-approval', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    const result = await h.asTenant(admin, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      const all = await codegen.listGenerations(sessionId);
+      // v1 is already integrated; approve v2 then v3 (the remaining drafts).
+      const draftIds = all.filter((g) => g.reviewStatus === 'draft').map((g) => g.id);
+      assert.ok(draftIds.length >= 2, 'need at least two draft versions');
+      const [secondId, thirdId] = draftIds;
+      await codegen.approve(secondId!);
+      await codegen.approve(thirdId!);
+      return codegen.listGenerations(sessionId);
+    });
+    const ready = result.filter((g) => g.integrationStatus === 'ready_to_integrate');
+    assert.equal(ready.length, 1, 'exactly one ready_to_integrate candidate');
+    // The earlier-approved version was demoted; v1 stays integrated (not demoted).
+    assert.equal(result.filter((g) => g.integrationStatus === 'integrated').length, 1);
+  });
+
+  it("22d. approving a version marks the session's other versions superseded", async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    const after = await h.asTenant(admin, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      const all = await codegen.listGenerations(sessionId);
+      // Approve a version that is not currently the approved one; every other
+      // version of the same session must become superseded.
+      const target = all.find((g) => g.reviewStatus !== 'approved') ?? all[0]!;
+      await codegen.approve(target.id);
+      return { targetId: target.id, list: await codegen.listGenerations(sessionId) };
+    });
+    const target = after.list.find((g) => g.id === after.targetId)!;
+    assert.equal(target.reviewStatus, 'approved', 'the approved version is active');
+    const others = after.list.filter((g) => g.id !== after.targetId);
+    assert.ok(others.length >= 1, 'the session has other versions');
+    assert.ok(
+      others.every((g) => g.reviewStatus === 'superseded'),
+      'every other version is superseded',
+    );
+    assert.equal(
+      after.list.filter((g) => g.reviewStatus === 'approved').length,
+      1,
+      'exactly one approved version per session',
+    );
+  });
+
+  it('22e. a superseded version cannot be integrated', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    const supersededId = await h.asTenant(admin, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      const all = await codegen.listGenerations(sessionId);
+      return all.find((g) => g.reviewStatus === 'superseded')?.id;
+    });
+    assert.ok(supersededId, 'a superseded version exists from the prior approval');
+    await assert.rejects(
+      h.asTenant(qa, async (ctx) => {
+        const codegen = new CodegenService(ctx, h!.dispatcher);
+        return codegen.integrate(supersededId!, {
+          status: 'integrated',
+          ref: 'https://example.test/commit/abc',
+        });
+      }),
+      /ready_to_integrate/,
+      'a superseded version is not ready_to_integrate',
+    );
+  });
+
+  it('22f. re-approving a superseded version reactivates it', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    const result = await h.asTenant(admin, async (ctx) => {
+      const codegen = new CodegenService(ctx, h!.dispatcher);
+      const before = await codegen.listGenerations(sessionId);
+      const superseded = before.find((g) => g.reviewStatus === 'superseded')!;
+      const reactivated = await codegen.approve(superseded.id);
+      return { reactivated, list: await codegen.listGenerations(sessionId) };
+    });
+    assert.equal(result.reactivated.reviewStatus, 'approved');
+    assert.equal(result.reactivated.integrationStatus, 'ready_to_integrate');
+    assert.equal(
+      result.list.filter((g) => g.reviewStatus === 'approved').length,
+      1,
+      'still exactly one approved version',
+    );
+    assert.equal(
+      result.list.filter((g) => g.integrationStatus === 'ready_to_integrate').length,
+      1,
+      'still exactly one ready_to_integrate candidate',
+    );
   });
 
   it('23. a targeted review comment records its generation and author', async (t) => {
@@ -658,6 +772,15 @@ describe('end-to-end MVP flow (service layer)', () => {
       return projects.getProject(projectId);
     });
     assert.equal(read.knowledgeMd, updated.knowledgeMd);
+  });
+
+  it('27b. the seeded knowledge hub can be cleared to empty', async (t) => {
+    if (!reachable || !h) return t.skip('no Postgres');
+    const cleared = await h.asTenant(admin, async (ctx) => {
+      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      return projects.setKnowledge(projectId, { knowledgeMd: null, defaultCredsSecretRef: null });
+    });
+    assert.equal(cleared.knowledgeMd, null, 'admin can clear the hub after it was seeded');
   });
 
   it('28. a per-generation framework override is persisted; tenant default is unchanged', async (t) => {

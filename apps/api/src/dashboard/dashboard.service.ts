@@ -10,6 +10,7 @@ import type {
   RankingResponse,
   UserMetric,
 } from '@qassistant/shared';
+import type { IntegrationStatus } from '@qassistant/shared/enums';
 import { RequestContext } from '../auth/request-context.js';
 import { AppException } from '../auth/errors.js';
 import {
@@ -117,6 +118,19 @@ export class DashboardService {
           WHERE gt.session_id = ${sessions.id}
             AND gt.kind = 'playwright_test'
         )`,
+        // Derived integration status of the session's candidate version:
+        // ready_to_integrate wins; otherwise the most recent integrated/failed
+        // outcome; NULL when no version is a candidate yet (rendered as "—").
+        integrationStatus: sql<IntegrationStatus | null>`(
+          SELECT gt.integration_status FROM ${generatedTests} gt
+          WHERE gt.session_id = ${sessions.id}
+            AND gt.integration_status <> 'not_ready'
+          ORDER BY
+            CASE gt.integration_status WHEN 'ready_to_integrate' THEN 0 ELSE 1 END,
+            gt.integrated_at DESC NULLS LAST,
+            gt.updated_at DESC
+          LIMIT 1
+        )`,
       })
       .from(sessions)
       .innerJoin(projects, eq(projects.id, sessions.projectId))
@@ -134,6 +148,7 @@ export class DashboardService {
       recordedByEmail: r.recordedByEmail ?? null,
       durationSeconds: durationSeconds(r.session.startedAt, r.session.endedAt),
       generatedTestCount: r.generatedTestCount ?? 0,
+      integrationStatus: r.integrationStatus ?? null,
     }));
 
     const last = page[page.length - 1];

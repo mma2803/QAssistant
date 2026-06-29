@@ -165,6 +165,11 @@ th {
   color: var(--warn);
   border-color: var(--warn);
 }
+.badge.superseded {
+  color: var(--muted);
+  border-color: var(--muted);
+  text-decoration: line-through;
+}
 
 .row {
   display: flex;

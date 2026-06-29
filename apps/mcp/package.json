@@ -1,0 +1,25 @@
+{
+  "name": "@qassistant/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QAssistant MCP server: exposes records and generated code to MCP clients (stdio) and records integration outcomes. A REST client of the QAssistant API; never pushes to Git.",
+  "type": "module",
+  "bin": {
+    "qassistant-mcp": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@qassistant/shared": "*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.11",
+    "typescript": "^5.6.3"
+  }
+}

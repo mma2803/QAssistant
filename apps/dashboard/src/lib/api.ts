@@ -177,8 +177,8 @@ export const api = {
     request<{ items: GeneratedTest[] }>('GET', `/sessions/${sessionId}/generations`),
   approveGeneration: (generatedTestId: string) =>
     request<GeneratedTest>('POST', `/generations/${generatedTestId}/approve`),
-  integrateGeneration: (generatedTestId: string) =>
-    request<GeneratedTest>('POST', `/generations/${generatedTestId}/integrate`),
+  // Integration outcomes (integrated / failed_to_integrate) are reported only by
+  // the MCP client that owns the Git push; the dashboard never sets them.
   addComment: (sessionId: string, body: CreateCommentRequest) =>
     request<GenerationComment>('POST', `/sessions/${sessionId}/comments`, body),
   regenerate: (sessionId: string, body: RegenerateRequest) =>

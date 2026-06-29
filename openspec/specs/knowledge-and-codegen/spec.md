@@ -4,7 +4,7 @@
 TBD - created by archiving change qassistant-mvp. Update Purpose after archive.
 ## Requirements
 ### Requirement: Per-project knowledge hub
-The system SHALL let an admin maintain a per-project knowledge hub, edited in the dashboard, containing a markdown overview of how the app works and an optional reference to default credentials (such as test account logins or API tokens needed during testing), stored in Secret Manager and surfaced as labeled text context during code generation. The knowledge hub is optional: code generation MAY proceed when the hub is empty, using only recording and Jira or description context.
+The system SHALL let an admin maintain a per-project knowledge hub, edited in the dashboard, containing a markdown overview of how the app works and an optional reference to default credentials (such as test account logins or API tokens needed during testing), stored in Secret Manager and surfaced as labeled text context during code generation. The knowledge hub is optional: code generation MAY proceed when the hub is empty, using only recording and Jira or description context. A newly created project SHALL have its knowledge hub markdown initialized with a default, editable test-generation guidance template, and existing projects whose knowledge hub markdown is null or blank SHALL be backfilled with the same template. The template is guidance surfaced as labeled input context and SHALL NOT override the generator's platform rules; an admin MAY edit or clear it like any knowledge hub content.
 
 #### Scenario: Admin edits project context
 - **WHEN** an admin saves the project's markdown overview and default-credentials reference in the dashboard
@@ -13,6 +13,18 @@ The system SHALL let an admin maintain a per-project knowledge hub, edited in th
 #### Scenario: Code generation proceeds with empty knowledge hub
 - **WHEN** a user requests code generation for a session in a project whose knowledge hub has no markdown and no credentials reference
 - **THEN** the system generates using recording, Jira context (when present), and tester description only, without blocking on the missing hub content
+
+#### Scenario: New project seeded with the default template
+- **WHEN** a project is created
+- **THEN** its knowledge hub markdown is initialized with the default test-generation guidance template, which the admin can edit or clear afterwards
+
+#### Scenario: Existing empty knowledge hub backfilled
+- **WHEN** the default-template change is applied and a project's knowledge hub markdown is null or blank
+- **THEN** the system fills it with the default template, and a project whose knowledge hub already has content is left unchanged
+
+#### Scenario: Default template is guidance only
+- **WHEN** code generation runs for a project carrying the default template
+- **THEN** the template is supplied as labeled input context and does not override the generator's platform rules
 
 ### Requirement: Gemini model routing
 The system SHALL route generation tasks by tier: a Flash-tier model for summaries, analytics, and quick replay scripts, and Gemini 3 Pro for real generated tests, with model identifiers configurable rather than hard-coded.
@@ -36,9 +48,17 @@ The system SHALL treat captured DOM, screenshots, Jira text/comments/attachments
 - **WHEN** any tenant user (admin or qa-engineer) reviews a generated test version and marks it approved
 - **THEN** the system records the approving user and timestamp without claiming the test has been automatically executed
 
-#### Scenario: User marks a generated test integrated
-- **WHEN** any tenant user flags a generated test as `INTEGRATED`
-- **THEN** the system records that the recording's test was added to the automated tests repo as a manual flag, without requiring proof of repository integration
+#### Scenario: Approval makes a version ready to integrate
+- **WHEN** a generated test version is approved
+- **THEN** the system sets that version's integration status to `ready_to_integrate` and makes it the session's single integration candidate, replacing any previously ready version for the same session
+
+#### Scenario: Approval supersedes the session's other versions
+- **WHEN** a generated test version is approved while the same session has other versions
+- **THEN** the system sets every other version of that session to review status `superseded`, demoting any other version still `ready_to_integrate` back to `not_ready`, while preserving the integration record of any version already `integrated` or `failed_to_integrate`
+
+#### Scenario: Integration status recorded from a client
+- **WHEN** an MCP client reports that a ready version was added to the automated-tests repo
+- **THEN** the system records the integration status (`integrated` or `failed_to_integrate`) with the acting user, timestamp, and a repo reference or error message, without QAssistant pushing code or holding Git credentials
 
 #### Scenario: Generated tests deleted with session
 - **WHEN** a session is permanently deleted after its deletion grace period
@@ -64,7 +84,7 @@ The system SHALL allow a user to add comments on generated code and to regenerat
 - **THEN** the system produces a new version of the code that takes the comment into account
 
 ### Requirement: Context-grounded test generation
-The system SHALL generate asserted tests in the recording's selected test framework and language (Playwright with TypeScript by default) from a recording's DOM-replay flow, inferring assertions from the linked Jira ticket when present, Jira comments/attachments when available, the tester-written description, the project knowledge hub, the project markdown, optional screenshots, and any tester-flagged states.
+The system SHALL generate asserted tests in the recording's selected test framework and language (Playwright with TypeScript by default) from a recording's DOM-replay flow, inferring assertions from the linked Jira ticket when present, Jira comments/attachments when available, the tester-written description, the project knowledge hub, the project markdown, optional screenshots, and any tester-flagged states. The generated test SHALL follow robustness defaults: (1) after an action that changes an observable state (such as a quantity, total, count, or selection), it SHALL assert that resulting state — exact when the value is controlled by the test, and relative/directional, range, or format otherwise; (2) it SHALL use resilient selectors in priority order test-id/data attributes, then accessible role with name/label/visible text, then CSS class as a last resort, and SHALL NOT use positional selectors (index, `nth-child`, `nth-of-type`) or auto-generated/hashed class selectors; (3) it SHALL target the project's base URL rather than hard-coding a full origin; (4) it SHALL prefer state relations and invariants over exact values for dynamic, generated, or time-dependent data; and (5) it SHALL NOT emit trivial assertions on structural containers or generic orchestrators that do not prove the test case. A tester-flagged state with an explicit expected value SHALL still be asserted exactly; the robustness defaults apply to everything the tester did not pin.
 
 #### Scenario: Generate code from a recording
 - **WHEN** a user requests code generation for a recording
@@ -81,6 +101,26 @@ The system SHALL generate asserted tests in the recording's selected test framew
 #### Scenario: Assertions reflect flagged states
 - **WHEN** a recording contains tester-flagged selectors/states
 - **THEN** the generated test includes assertions reflecting those flagged states
+
+#### Scenario: Action effect is asserted
+- **WHEN** the recorded flow performs an action that changes an observable state (e.g. incrementing a quantity or applying a discount)
+- **THEN** the generated test asserts the resulting state — an exact value when the test controls it (e.g. the quantity after a known number of increments) or a relative/directional, range, or format assertion otherwise (e.g. the total after a discount is lower than before)
+
+#### Scenario: No positional selectors
+- **WHEN** the generated test selects elements
+- **THEN** it uses test-id/role/label/text selectors (CSS class only as a last resort) and does not use index, `nth-child`, `nth-of-type`, or auto-generated/hashed class selectors
+
+#### Scenario: Base URL is not hard-coded
+- **WHEN** the generated test navigates to the application
+- **THEN** it targets the project's base URL rather than embedding a full hard-coded origin
+
+#### Scenario: Invariants over hardcoded volatile values
+- **WHEN** an observed value is dynamic, generated, or time-dependent and was not flagged by the tester
+- **THEN** the generated test asserts an invariant, range, or format rather than the exact observed value
+
+#### Scenario: Flagged exact value takes precedence
+- **WHEN** a tester flags a state with an explicit expected value
+- **THEN** the generated test asserts that exact value, overriding the invariant-over-exact default for that state
 
 #### Scenario: Optional screenshots used as compressed context
 - **WHEN** screenshots are available and useful for assertion inference
@@ -116,4 +156,54 @@ The system SHALL let code generation target a selectable test framework and lang
 #### Scenario: Selector offers predefined options plus a free-form entry
 - **WHEN** a user opens the framework selector next to the Generate action
 - **THEN** the system offers five predefined framework/language options and a free-form custom entry for an arbitrary framework and language
+
+### Requirement: Generated test integration status lifecycle
+The system SHALL track an integration status on each generated test version with
+the values `not_ready` (default), `ready_to_integrate`, `integrated`, and
+`failed_to_integrate`, replacing the prior boolean integrated flag. A version
+SHALL carry an integration reference (commit or PR URL) when integrated and an
+integration error message when integration failed, and SHALL retain the
+integrating user and timestamp. At most one version per session SHALL be
+`ready_to_integrate` at a time.
+
+#### Scenario: Default integration status
+- **WHEN** a generated test version is created
+- **THEN** its integration status is `not_ready`
+
+#### Scenario: Single ready candidate per session
+- **WHEN** a version is approved and an earlier version of the same session was already `ready_to_integrate`
+- **THEN** the newly approved version becomes the candidate and the earlier version is no longer `ready_to_integrate`
+
+#### Scenario: Integrated version stores a reference
+- **WHEN** a version's integration status is set to `integrated`
+- **THEN** the system stores the supplied repo reference (commit or PR URL) together with the integrating user and timestamp
+
+#### Scenario: Failed integration stores a message
+- **WHEN** a version's integration status is set to `failed_to_integrate`
+- **THEN** the system stores the supplied error message and does not require a repo reference
+
+#### Scenario: Migration from the legacy integrated flag
+- **WHEN** the integration status replaces the legacy boolean `integrated` flag
+- **THEN** versions previously flagged integrated map to `integrated` and all others map to `not_ready`, preserving existing integrating user and timestamp
+
+### Requirement: Single approved version per session
+The system SHALL allow at most one approved version per session by adding a
+`superseded` review status. When a version is approved, the system SHALL mark all
+other versions of the same session `superseded`. A `superseded` version SHALL
+remain readable for history but SHALL NOT be eligible for integration. Approval
+SHALL be reversible: the system SHALL allow approving any version of the session
+— including a `superseded` one — which makes it the active candidate and
+re-supersedes the others.
+
+#### Scenario: Approving a version supersedes the others
+- **WHEN** a session has versions A and B and version B is approved
+- **THEN** version B is `approved` and version A becomes `superseded`
+
+#### Scenario: A superseded version cannot be integrated
+- **WHEN** a client attempts to set an integration status on a `superseded` version
+- **THEN** the system rejects the request because only a `ready_to_integrate` version can be integrated
+
+#### Scenario: Re-approving a superseded version reactivates it
+- **WHEN** version A is `superseded` and the user approves version A again
+- **THEN** version A becomes the `approved`, `ready_to_integrate` candidate and the previously approved version becomes `superseded`
 

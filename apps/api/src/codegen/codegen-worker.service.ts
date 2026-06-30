@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import type { GenerateTaskPayload } from '@qassistant/shared';
+import type { GenerateTaskPayload, NetworkLogChunk } from '@qassistant/shared';
+import { networkLogChunkSchema } from '@qassistant/shared';
 import type { ModelTier } from '@qassistant/shared/enums';
 import { DbService, type Database } from '../db/db.service.js';
 import {
@@ -70,6 +71,7 @@ export class CodegenWorkerService {
       const { prompt, summary } = buildPrompt({
         kind: payload.kind,
         tier,
+        testType: payload.testType,
         framework: payload.framework,
         language: payload.language,
         sources,
@@ -89,6 +91,7 @@ export class CodegenWorkerService {
         code,
         framework: payload.framework,
         language: payload.language,
+        testType: payload.testType,
         reviewStatus: 'draft',
         integrationStatus: 'not_ready',
         promptInputsSummary: summary,
@@ -107,10 +110,34 @@ export class CodegenWorkerService {
   ): Promise<LabeledSource[]> {
     const sources: LabeledSource[] = [];
 
-    // 1. Recording DOM-replay flow (primary record).
-    const domText = await this.loadDomReplay(db, payload.tenantId, payload.sessionId);
-    if (domText) {
-      sources.push({ label: 'recording.dom', kind: 'recording', text: domText });
+    // 1. Primary recorded evidence depends on the test type (configurable-test-type):
+    //    - backend → captured HTTP traffic (network_log artifacts),
+    //    - ui      → DOM-replay flow (the original behaviour).
+    if (payload.testType === 'backend') {
+      const netText = await this.loadNetworkLog(db, payload.tenantId, payload.sessionId);
+      if (netText) {
+        sources.push({
+          label: 'recording.network',
+          kind: 'recording',
+          text: netText,
+          note: 'captured HTTP request/response calls; sensitive headers/values redacted',
+        });
+      } else {
+        // 6.5 fallback: no traffic captured. Label the gap so the model grounds
+        // the API test in Jira/description/knowledge instead, and reviewers know
+        // it is weakly grounded.
+        sources.push({
+          label: 'recording.network.absent',
+          kind: 'recording',
+          text: 'No HTTP traffic was captured for this session. Generate the API test from the Jira ticket, tester description, and project knowledge instead; this test is weakly grounded and should be reviewed carefully.',
+          note: 'no network_log captured; backend test weakly grounded',
+        });
+      }
+    } else {
+      const domText = await this.loadDomReplay(db, payload.tenantId, payload.sessionId);
+      if (domText) {
+        sources.push({ label: 'recording.dom', kind: 'recording', text: domText });
+      }
     }
 
     // 2. Tester-flagged states (codegen hints; assertions must reflect these).
@@ -174,25 +201,28 @@ export class CodegenWorkerService {
       text: `Application base URL: ${project.baseUrl}`,
     });
 
-    // 6. Optional compressed screenshot context (counts/filenames; bytes not inlined).
-    const shotRows = await db
-      .select({ seq: artifacts.seq, gcsPath: artifacts.gcsPath })
-      .from(artifacts)
-      .where(
-        and(
-          eq(artifacts.tenantId, payload.tenantId),
-          eq(artifacts.sessionId, payload.sessionId),
-          eq(artifacts.type, 'screenshot'),
-        ),
-      )
-      .orderBy(asc(artifacts.seq));
-    if (shotRows.length > 0) {
-      sources.push({
-        label: 'recording.screenshots',
-        kind: 'screenshots',
-        text: `${shotRows.length} viewport screenshot(s) captured for before/after assertion inference.`,
-        note: 'compressed/downsampled screenshot context (not raw bytes)',
-      });
+    // 6. Optional compressed screenshot context (counts/filenames; bytes not
+    //    inlined). UI-only: screenshots do not help ground an API test.
+    if (payload.testType !== 'backend') {
+      const shotRows = await db
+        .select({ seq: artifacts.seq, gcsPath: artifacts.gcsPath })
+        .from(artifacts)
+        .where(
+          and(
+            eq(artifacts.tenantId, payload.tenantId),
+            eq(artifacts.sessionId, payload.sessionId),
+            eq(artifacts.type, 'screenshot'),
+          ),
+        )
+        .orderBy(asc(artifacts.seq));
+      if (shotRows.length > 0) {
+        sources.push({
+          label: 'recording.screenshots',
+          kind: 'screenshots',
+          text: `${shotRows.length} viewport screenshot(s) captured for before/after assertion inference.`,
+          note: 'compressed/downsampled screenshot context (not raw bytes)',
+        });
+      }
     }
 
     // 7. User comments when regenerating (most recent first, bounded).
@@ -253,6 +283,66 @@ export class CodegenWorkerService {
       }
     }
     return parts.join('\n');
+  }
+
+  /**
+   * Load the session's captured HTTP traffic (network_log artifacts) from GCS and
+   * render it as a compact, labeled text block for the backend prompt. Sensitive
+   * headers/values were already redacted by the extension before upload; the
+   * worker still runs everything through redactSecrets() in buildPrompt (defense
+   * in depth). Returns '' when no traffic was captured.
+   */
+  private async loadNetworkLog(db: Database, tenantId: string, sessionId: string): Promise<string> {
+    const rows = await db
+      .select()
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.tenantId, tenantId),
+          eq(artifacts.sessionId, sessionId),
+          eq(artifacts.type, 'network_log'),
+        ),
+      )
+      .orderBy(asc(artifacts.seq))
+      .limit(CodegenWorkerService.MAX_DOM_CHUNKS);
+
+    const calls: string[] = [];
+    for (const row of rows) {
+      const bytes = await this.reader.download(row.gcsPath);
+      if (!bytes) continue;
+      let chunk: NetworkLogChunk;
+      try {
+        const parsed = JSON.parse(decodeArtifactText(bytes, row.compression as 'none' | 'gzip'));
+        chunk = networkLogChunkSchema.parse(parsed);
+      } catch {
+        // Skip an undecodable/invalid chunk rather than failing the generation.
+        continue;
+      }
+      for (const e of chunk.entries) {
+        const reqHeaders = Object.entries(e.requestHeaders)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('; ');
+        const resHeaders = Object.entries(e.responseHeaders)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('; ');
+        calls.push(
+          [
+            `${e.method} ${e.url} -> ${e.status ?? '(no response)'}`,
+            reqHeaders ? `  request headers: ${reqHeaders}` : '',
+            e.requestBody
+              ? `  request body${e.requestBodyTruncated ? ' (truncated)' : ''}: ${e.requestBody}`
+              : '',
+            resHeaders ? `  response headers: ${resHeaders}` : '',
+            e.responseBody
+              ? `  response body${e.responseBodyTruncated ? ' (truncated)' : ''}: ${e.responseBody}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        );
+      }
+    }
+    return calls.join('\n\n');
   }
 
   /** Load Jira description/comments/attachments for a Jira-linked session. */

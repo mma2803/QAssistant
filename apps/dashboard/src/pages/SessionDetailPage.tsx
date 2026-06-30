@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { GeneratedTest, GenerateRequest } from '@qassistant/shared';
+import type { GeneratedTest, GenerateRequest, TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 import { api, saveBlob } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
@@ -200,18 +200,30 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
   const [fwChoice, setFwChoice] = useState<string>('');
   const [customFw, setCustomFw] = useState('');
   const [customLang, setCustomLang] = useState('');
+  // Per-generation test-type override. '' = use the resolved default, else 'ui'
+  // | 'backend'. Like the framework selector, it only affects this generation.
+  const [ttChoice, setTtChoice] = useState<'' | TestType>('');
 
   const customIncomplete = fwChoice === 'custom' && !(customFw.trim() && customLang.trim());
 
   function selectedOverride(): Partial<GenerateRequest> | undefined {
-    if (fwChoice === '') return undefined; // fall back to tenant default
+    const override: Partial<GenerateRequest> = {};
     if (fwChoice === 'custom') {
       const framework = customFw.trim();
       const language = customLang.trim();
-      return framework && language ? { framework, language } : undefined;
+      if (framework && language) {
+        override.framework = framework;
+        override.language = language;
+      }
+    } else if (fwChoice !== '') {
+      const preset = TEST_FRAMEWORK_PRESETS[Number(fwChoice)];
+      if (preset) {
+        override.framework = preset.framework;
+        override.language = preset.language;
+      }
     }
-    const preset = TEST_FRAMEWORK_PRESETS[Number(fwChoice)];
-    return preset ? { framework: preset.framework, language: preset.language } : undefined;
+    if (ttChoice !== '') override.testType = ttChoice;
+    return Object.keys(override).length > 0 ? override : undefined;
   }
 
   const effectiveFramework =
@@ -219,12 +231,24 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
   const effectiveLanguage =
     project.data?.defaultTestLanguage ?? tenant.data?.defaultTestLanguage ?? 'TypeScript';
   const defaultLabel = `${effectiveFramework} / ${effectiveLanguage}`;
+  const effectiveTestType: TestType =
+    project.data?.defaultTestType ?? tenant.data?.defaultTestType ?? 'ui';
+  const testTypeLabel = effectiveTestType === 'backend' ? 'Back-end' : 'UI';
 
   return (
     <div className="card col">
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <h3 style={{ margin: 0 }}>Generated tests</h3>
         <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            aria-label="Test type"
+            value={ttChoice}
+            onChange={(e) => setTtChoice(e.target.value as '' | TestType)}
+          >
+            <option value="">Default ({testTypeLabel})</option>
+            <option value="ui">UI test</option>
+            <option value="backend">Back-end test</option>
+          </select>
           <select
             aria-label="Test framework"
             value={fwChoice}

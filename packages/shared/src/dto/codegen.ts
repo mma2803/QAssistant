@@ -1,6 +1,12 @@
 import { z } from 'zod';
-import { uuid, nonEmptyString, testFrameworkSchema, testLanguageSchema } from '../common.js';
-import { GENERATED_TEST_KINDS, MODEL_TIERS } from '../enums.js';
+import {
+  uuid,
+  nonEmptyString,
+  testFrameworkSchema,
+  testLanguageSchema,
+  testTypeSchema,
+} from '../common.js';
+import { GENERATED_TEST_KINDS, MODEL_TIERS, TEST_TYPES } from '../enums.js';
 import { generatedTestSchema, generationCommentSchema } from '../entities.js';
 
 /** Codegen DTOs (contract section 4.5). Async via Cloud Tasks. */
@@ -15,6 +21,9 @@ export const generateRequestSchema = z.object({
   modelTier: z.enum(MODEL_TIERS).optional(),
   framework: testFrameworkSchema.optional(),
   language: testLanguageSchema.optional(),
+  // Per-generation test-type override (UI/Back-end selector). When omitted the
+  // service falls back to project then tenant default (change: configurable-test-type).
+  testType: testTypeSchema.optional(),
 });
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 
@@ -73,6 +82,7 @@ export const regenerateRequestSchema = z.object({
   modelTier: z.enum(MODEL_TIERS).optional(),
   framework: testFrameworkSchema.optional(),
   language: testLanguageSchema.optional(),
+  testType: testTypeSchema.optional(),
   // The comment that drives this regeneration; stamped as source_comment_id.
   sourceCommentId: uuid.optional(),
 });
@@ -94,6 +104,10 @@ export const generateTaskPayloadSchema = z.object({
   // Resolved target (override or tenant default) the worker persists on the row.
   framework: z.string(),
   language: z.string(),
+  // Resolved test type the worker generates for and persists (change:
+  // configurable-test-type). Defaults to 'ui' so payloads predating the feature
+  // still validate and behave as before.
+  testType: z.enum(TEST_TYPES).default('ui'),
   sourceCommentId: uuid.optional(),
 });
 export type GenerateTaskPayload = z.infer<typeof generateTaskPayloadSchema>;

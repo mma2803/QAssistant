@@ -1,4 +1,4 @@
-import type { Project, Session } from '@qassistant/shared';
+import type { NetworkLogEntry, Project, Session } from '@qassistant/shared';
 
 /**
  * Typed message protocol between the three extension contexts:
@@ -71,6 +71,7 @@ export type Result<T> = OkResult<T> | ErrResult;
 
 export type ContentEvent =
   | { type: 'capture:events'; sessionId: string; events: unknown[] }
+  | { type: 'capture:network'; sessionId: string; entry: NetworkLogEntry }
   | { type: 'capture:flag'; sessionId: string; selector: string; eventOffsetMs: number; note?: string }
   | { type: 'capture:activity'; sessionId: string }
   | { type: 'content:ready' };

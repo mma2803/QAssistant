@@ -32,7 +32,7 @@ export type SessionStatus = (typeof SESSION_STATUSES)[number];
 export const SESSION_CLOSE_REASONS = ['stopped', 'inactivity'] as const;
 export type SessionCloseReason = (typeof SESSION_CLOSE_REASONS)[number];
 
-export const ARTIFACT_TYPES = ['dom_chunk', 'screenshot'] as const;
+export const ARTIFACT_TYPES = ['dom_chunk', 'screenshot', 'network_log'] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
 export const COMPRESSIONS = ['none', 'gzip'] as const;
@@ -40,6 +40,18 @@ export type Compression = (typeof COMPRESSIONS)[number];
 
 export const GENERATED_TEST_KINDS = ['playwright_test', 'replay_script'] as const;
 export type GeneratedTestKind = (typeof GENERATED_TEST_KINDS)[number];
+
+/**
+ * Test type a generation targets (change: configurable-test-type). Independent
+ * from `kind` (a UI strategy) and from the framework/language axis:
+ *   - `ui`      → a UI test driven by the recorded DOM-replay flow (the original behaviour),
+ *   - `backend` → an API/HTTP test grounded in the session's captured network traffic.
+ */
+export const TEST_TYPES = ['ui', 'backend'] as const;
+export type TestType = (typeof TEST_TYPES)[number];
+
+/** Default test type when no override, project default, or tenant default is set. */
+export const DEFAULT_TEST_TYPE: TestType = 'ui';
 
 export const MODEL_TIERS = ['flash', 'pro'] as const;
 export type ModelTier = (typeof MODEL_TIERS)[number];

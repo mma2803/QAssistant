@@ -4,6 +4,7 @@ import type {
   ModelTier,
   ReviewStatus,
   IntegrationStatus,
+  TestType,
 } from '@qassistant/shared/enums';
 import type { generatedTests, generationComments } from '../db/schema.js';
 
@@ -36,6 +37,7 @@ export function toGeneratedTest(row: GeneratedTestRow): GeneratedTest {
     code: row.code,
     framework: row.framework,
     language: row.language,
+    testType: row.testType as TestType,
     reviewStatus: row.reviewStatus as ReviewStatus,
     approvedBy: row.approvedBy,
     approvedAt: isoOrNull(row.approvedAt),

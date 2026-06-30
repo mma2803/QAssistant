@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ERROR_CODES } from './enums.js';
+import { ERROR_CODES, TEST_TYPES } from './enums.js';
 
 /** UUID v7 primary keys are still valid RFC-4122 UUIDs at rest, validated as uuid. */
 export const uuid = z.string().uuid();
@@ -17,6 +17,9 @@ export const nonEmptyString = z.string().trim().min(1);
  */
 export const testFrameworkSchema = z.string().trim().min(1).max(60);
 export const testLanguageSchema = z.string().trim().min(1).max(60);
+
+/** Codegen test type (change: configurable-test-type): `ui` | `backend`. */
+export const testTypeSchema = z.enum(TEST_TYPES);
 
 /** Standard error envelope: { error: { code, message, details? } }. */
 export const errorEnvelopeSchema = z.object({

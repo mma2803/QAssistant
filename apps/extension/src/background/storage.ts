@@ -48,6 +48,11 @@ export interface PersistedSession {
   /** Next sequence numbers per artifact type (monotonic per session). */
   nextDomSeq: number;
   nextShotSeq: number;
+  /** Network log (change: configurable-test-type): next chunk seq + session caps. */
+  nextNetSeq: number;
+  netEntries: number;
+  netBytes: number;
+  netTruncated: boolean;
   flagsRecorded: number;
   /** Last time we saw a capture event, for the local inactivity timer. */
   lastActivityMs: number;

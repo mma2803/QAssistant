@@ -1,5 +1,5 @@
-import type { Project, Session } from '@qassistant/shared';
-import { capture } from '../shared/config.js';
+import type { NetworkLogEntry, Project, Session } from '@qassistant/shared';
+import { capture, networkCapture } from '../shared/config.js';
 import type { MaskingConfig, RecorderCommand } from '../shared/messages.js';
 import {
   readActiveSession,
@@ -8,7 +8,7 @@ import {
   type PersistedSession,
 } from './storage.js';
 import { startSession, stopSession, createFlag } from './api.js';
-import { uploadDomChunk, uploadScreenshot } from './upload.js';
+import { uploadDomChunk, uploadScreenshot, uploadNetworkLog } from './upload.js';
 
 /**
  * Recording lifecycle owned by the service worker. Holds per-session state in
@@ -26,13 +26,51 @@ interface RuntimeState {
   project: Project;
   session: Session;
   eventBuffer: unknown[];
+  networkBuffer: NetworkLogEntry[];
+  // Network caps tracked in memory (single-threaded) so accepting a call never
+  // does a persisted read-modify-write that races with the dom_chunk flush.
+  netEntries: number;
+  netBytes: number;
+  netTruncated: boolean;
   flushTimer: ReturnType<typeof setInterval> | null;
   screenshotTimer: ReturnType<typeof setInterval> | null;
+  netFlushTimer: ReturnType<typeof setInterval> | null;
   inactivityTimer: ReturnType<typeof setTimeout> | null;
   uploading: boolean;
+  netUploading: boolean;
 }
 
 let runtime: RuntimeState | null = null;
+
+/**
+ * Serialized read-modify-write of the persisted session. chrome.storage has no
+ * transaction, and several producers (dom flush, screenshot, network flush,
+ * activity, flags) update the same record across `await` points. Without
+ * serialization a stale read clobbers another producer's field — most visibly
+ * the monotonic `nextDomSeq`, which then collides and breaks dom_chunk uploads.
+ * Every mutation goes through this single promise chain so they never interleave.
+ */
+let persistedQueue: Promise<unknown> = Promise.resolve();
+function mutatePersisted<T>(fn: (p: PersistedSession) => T): Promise<T | undefined> {
+  const run = persistedQueue.then(async () => {
+    const p = await readActiveSession();
+    if (!p) return undefined;
+    const result = fn(p);
+    await writeActiveSession(p);
+    return result;
+  });
+  persistedQueue = run.catch(() => undefined);
+  return run;
+}
+
+/** Atomically reserve (read + increment) a monotonic per-session sequence number. */
+function reserveSeq(field: 'nextDomSeq' | 'nextShotSeq' | 'nextNetSeq'): Promise<number | undefined> {
+  return mutatePersisted((p) => {
+    const seq = p[field] ?? 0;
+    p[field] = seq + 1;
+    return seq;
+  });
+}
 
 function tabTargetFor(): Promise<chrome.tabs.Tab | undefined> {
   return chrome.tabs.query({ active: true, lastFocusedWindow: true }).then((t) => t[0]);
@@ -93,6 +131,10 @@ export async function start(args: StartArgs): Promise<Session> {
     startedAtIso: session.startedAt,
     nextDomSeq: 0,
     nextShotSeq: 0,
+    nextNetSeq: 0,
+    netEntries: 0,
+    netBytes: 0,
+    netTruncated: false,
     flagsRecorded: 0,
     lastActivityMs: Date.now(),
   };
@@ -102,10 +144,16 @@ export async function start(args: StartArgs): Promise<Session> {
     project: args.project,
     session,
     eventBuffer: [],
+    networkBuffer: [],
+    netEntries: 0,
+    netBytes: 0,
+    netTruncated: false,
     flushTimer: null,
     screenshotTimer: null,
+    netFlushTimer: null,
     inactivityTimer: null,
     uploading: false,
+    netUploading: false,
   };
 
   await commandRecorder({
@@ -134,6 +182,12 @@ function maskingFor(project: Project): MaskingConfig {
 function startTimers(persisted: PersistedSession): void {
   if (!runtime) return;
   runtime.flushTimer = setInterval(() => void flush('timer'), capture.chunkIntervalMs);
+  // Network capture is always on while recording (MVP): flush buffered calls
+  // periodically (change: configurable-test-type).
+  runtime.netFlushTimer = setInterval(
+    () => void flushNetwork('timer'),
+    networkCapture.flushIntervalMs,
+  );
   if (persisted.screenshotEnabled) {
     runtime.screenshotTimer = setInterval(() => void captureScreenshot(), capture.screenshotIntervalMs);
   }
@@ -160,35 +214,42 @@ export async function ingestEvents(sessionId: string, events: unknown[]): Promis
 
 /** Update the local inactivity timer on any captured activity. */
 export async function noteActivity(sessionId: string): Promise<void> {
-  const persisted = await readActiveSession();
-  if (!persisted || persisted.sessionId !== sessionId) return;
-  persisted.lastActivityMs = Date.now();
-  await writeActiveSession(persisted);
-  resetInactivity(persisted.inactivityMs);
+  if (!runtime || runtime.session.id !== sessionId) return;
+  const inactivityMs = await mutatePersisted((p) => {
+    if (p.sessionId !== sessionId) return undefined;
+    p.lastActivityMs = Date.now();
+    return p.inactivityMs;
+  });
+  if (inactivityMs) resetInactivity(inactivityMs);
 }
 
 /** Flush buffered events into one gzipped dom_chunk artifact. */
 export async function flush(_reason: 'timer' | 'threshold' | 'stop'): Promise<void> {
   if (!runtime || runtime.uploading) return;
   if (runtime.eventBuffer.length === 0) return;
-  const persisted = await readActiveSession();
-  if (!persisted) return;
 
   const batch = runtime.eventBuffer;
   runtime.eventBuffer = [];
   runtime.uploading = true;
-  const seq = persisted.nextDomSeq;
+  // Reserve the seq atomically so a concurrent screenshot/network flush can't
+  // clobber nextDomSeq and cause a duplicate-seq collision.
+  const seq = await reserveSeq('nextDomSeq');
+  const sessionId = runtime.session.id;
+  if (seq === undefined) {
+    runtime.eventBuffer = batch.concat(runtime.eventBuffer);
+    runtime.uploading = false;
+    return;
+  }
   try {
     await uploadDomChunk({
-      sessionId: persisted.sessionId,
+      sessionId,
       seq,
       json: JSON.stringify(batch),
       capturedAtIso: new Date().toISOString(),
     });
-    persisted.nextDomSeq = seq + 1;
-    await writeActiveSession(persisted);
   } catch (err) {
-    // Re-buffer the batch so a transient failure doesn't drop events.
+    // Re-buffer the batch so a transient failure doesn't drop events (the
+    // reserved seq is skipped — gaps are fine, duplicates are not).
     runtime.eventBuffer = batch.concat(runtime.eventBuffer);
     console.warn('dom_chunk upload failed, will retry', err);
   } finally {
@@ -196,11 +257,76 @@ export async function flush(_reason: 'timer' | 'threshold' | 'stop'): Promise<vo
   }
 }
 
+/**
+ * Accept one captured HTTP call from the MAIN-world interceptor (relayed by the
+ * content recorder). Enforces the per-session caps (entry count + total bytes):
+ * past a cap the entry is dropped and the chunk is marked truncated rather than
+ * dropped silently (change: configurable-test-type).
+ */
+export async function ingestNetwork(sessionId: string, entry: NetworkLogEntry): Promise<void> {
+  if (!runtime || runtime.session.id !== sessionId) return;
+
+  // Caps are tracked in memory only: accepting a call must NOT write the
+  // persisted record (that would race with the dom_chunk flush). Network traffic
+  // is also deliberately NOT treated as user activity — analytics/polling fire
+  // while the tester is idle and must not keep the inactivity timer alive.
+  const entryBytes = JSON.stringify(entry).length;
+  if (
+    runtime.netEntries >= networkCapture.maxEntries ||
+    runtime.netBytes + entryBytes > networkCapture.maxTotalBytes
+  ) {
+    if (!runtime.netTruncated) {
+      runtime.netTruncated = true;
+      console.warn('network_log cap reached; further calls are dropped for this session');
+    }
+    return;
+  }
+
+  runtime.networkBuffer.push(entry);
+  runtime.netEntries += 1;
+  runtime.netBytes += entryBytes;
+
+  if (runtime.networkBuffer.length >= networkCapture.flushEntryThreshold) {
+    await flushNetwork('threshold');
+  }
+}
+
+/** Flush buffered network entries into one gzipped network_log artifact. */
+export async function flushNetwork(_reason: 'timer' | 'threshold' | 'stop'): Promise<void> {
+  if (!runtime || runtime.netUploading) return;
+  if (runtime.networkBuffer.length === 0) return;
+
+  const batch = runtime.networkBuffer;
+  runtime.networkBuffer = [];
+  runtime.netUploading = true;
+  const truncated = runtime.netTruncated;
+  const seq = await reserveSeq('nextNetSeq');
+  const sessionId = runtime.session.id;
+  if (seq === undefined) {
+    runtime.networkBuffer = batch.concat(runtime.networkBuffer);
+    runtime.netUploading = false;
+    return;
+  }
+  try {
+    await uploadNetworkLog({
+      sessionId,
+      seq,
+      chunk: { entries: batch, ...(truncated ? { truncated: true } : {}) },
+      capturedAtIso: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Re-buffer so a transient failure doesn't drop captured calls.
+    runtime.networkBuffer = batch.concat(runtime.networkBuffer);
+    console.warn('network_log upload failed, will retry', err);
+  } finally {
+    runtime.netUploading = false;
+  }
+}
+
 /** Capture a viewport-only screenshot of the active tab and upload it. */
 async function captureScreenshot(): Promise<void> {
   if (!runtime) return;
-  const persisted = await readActiveSession();
-  if (!persisted || !persisted.screenshotEnabled) return;
+  const sessionId = runtime.session.id;
   try {
     const tab = await tabTargetFor();
     if (!tab || tab.windowId === undefined) return;
@@ -209,15 +335,14 @@ async function captureScreenshot(): Promise<void> {
       quality: 70,
     });
     const blob = dataUrlToBlob(dataUrl);
-    const seq = persisted.nextShotSeq;
+    const seq = await reserveSeq('nextShotSeq');
+    if (seq === undefined) return;
     await uploadScreenshot({
-      sessionId: persisted.sessionId,
+      sessionId,
       seq,
       blob,
       capturedAtIso: new Date().toISOString(),
     });
-    persisted.nextShotSeq = seq + 1;
-    await writeActiveSession(persisted);
   } catch (err) {
     console.warn('screenshot capture/upload failed', err);
   }
@@ -242,8 +367,9 @@ export async function flag(
   const persisted = await readActiveSession();
   if (!persisted || persisted.sessionId !== sessionId) return;
   await createFlag(sessionId, { selector, eventOffsetMs, note: note ?? null });
-  persisted.flagsRecorded += 1;
-  await writeActiveSession(persisted);
+  await mutatePersisted((p) => {
+    if (p.sessionId === sessionId) p.flagsRecorded += 1;
+  });
   await noteActivity(sessionId);
 }
 
@@ -261,6 +387,7 @@ export async function stop(_reason: 'stopped' | 'inactivity'): Promise<Session |
     return null;
   }
   await flush('stop');
+  await flushNetwork('stop');
   await commandRecorder({ type: 'recorder:stop' });
   let result: Session | null = null;
   try {
@@ -277,6 +404,7 @@ function teardownRuntime(): void {
   if (!runtime) return;
   if (runtime.flushTimer) clearInterval(runtime.flushTimer);
   if (runtime.screenshotTimer) clearInterval(runtime.screenshotTimer);
+  if (runtime.netFlushTimer) clearInterval(runtime.netFlushTimer);
   if (runtime.inactivityTimer) clearTimeout(runtime.inactivityTimer);
   runtime = null;
 }
@@ -328,10 +456,16 @@ export async function rehydrate(projectLookup: (id: string) => Promise<Project |
     project,
     session,
     eventBuffer: [],
+    networkBuffer: [],
+    netEntries: 0,
+    netBytes: 0,
+    netTruncated: false,
     flushTimer: null,
     screenshotTimer: null,
+    netFlushTimer: null,
     inactivityTimer: null,
     uploading: false,
+    netUploading: false,
   };
   await commandRecorder({
     type: 'recorder:start',

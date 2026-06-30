@@ -32,6 +32,7 @@ export class TenantSettingsService {
       .select({
         defaultTestFramework: tenants.defaultTestFramework,
         defaultTestLanguage: tenants.defaultTestLanguage,
+        defaultTestType: tenants.defaultTestType,
       })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
@@ -40,7 +41,7 @@ export class TenantSettingsService {
     if (!row) {
       throw new AppException('not_found', 'Tenant not found', HttpStatus.NOT_FOUND);
     }
-    return row;
+    return row as TenantSettingsResponse;
   }
 
   /** PUT /tenant/settings: change the tenant-wide default codegen target. */
@@ -51,16 +52,20 @@ export class TenantSettingsService {
       .set({
         defaultTestFramework: input.defaultTestFramework,
         defaultTestLanguage: input.defaultTestLanguage,
+        ...(input.defaultTestType !== undefined
+          ? { defaultTestType: input.defaultTestType }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(tenants.id, tenantId))
       .returning({
         defaultTestFramework: tenants.defaultTestFramework,
         defaultTestLanguage: tenants.defaultTestLanguage,
+        defaultTestType: tenants.defaultTestType,
       });
     if (!row) {
       throw new AppException('not_found', 'Tenant not found', HttpStatus.NOT_FOUND);
     }
-    return row;
+    return row as TenantSettingsResponse;
   }
 }

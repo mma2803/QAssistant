@@ -173,6 +173,9 @@ export class ProjectsService {
       .set({
         defaultTestFramework: input.defaultTestFramework,
         defaultTestLanguage: input.defaultTestLanguage,
+        ...(input.defaultTestType !== undefined
+          ? { defaultTestType: input.defaultTestType }
+          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))

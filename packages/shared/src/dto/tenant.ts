@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { testFrameworkSchema, testLanguageSchema } from '../common.js';
+import { testFrameworkSchema, testLanguageSchema, testTypeSchema } from '../common.js';
 
 /**
  * Tenant-wide codegen settings (change: configurable-test-framework). Unlike the
@@ -12,6 +12,8 @@ import { testFrameworkSchema, testLanguageSchema } from '../common.js';
 export const tenantSettingsResponseSchema = z.object({
   defaultTestFramework: z.string(),
   defaultTestLanguage: z.string(),
+  // Tenant-wide default test type (change: configurable-test-type).
+  defaultTestType: testTypeSchema,
 });
 export type TenantSettingsResponse = z.infer<typeof tenantSettingsResponseSchema>;
 
@@ -19,5 +21,8 @@ export type TenantSettingsResponse = z.infer<typeof tenantSettingsResponseSchema
 export const updateTenantSettingsRequestSchema = z.object({
   defaultTestFramework: testFrameworkSchema,
   defaultTestLanguage: testLanguageSchema,
+  // Optional so existing clients that only set framework/language keep working;
+  // applied only when present.
+  defaultTestType: testTypeSchema.optional(),
 });
 export type UpdateTenantSettingsRequest = z.infer<typeof updateTenantSettingsRequestSchema>;

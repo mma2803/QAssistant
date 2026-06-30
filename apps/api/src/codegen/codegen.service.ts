@@ -10,8 +10,12 @@ import type {
   GenerationComment,
   UpdateIntegrationStatusRequest,
 } from '@qassistant/shared';
-import type { ModelTier } from '@qassistant/shared/enums';
-import { DEFAULT_TEST_FRAMEWORK, DEFAULT_TEST_LANGUAGE } from '@qassistant/shared/enums';
+import type { ModelTier, TestType } from '@qassistant/shared/enums';
+import {
+  DEFAULT_TEST_FRAMEWORK,
+  DEFAULT_TEST_LANGUAGE,
+  DEFAULT_TEST_TYPE,
+} from '@qassistant/shared/enums';
 import { RequestContext } from '../auth/request-context.js';
 import { AppException } from '../auth/errors.js';
 import { generatedTests, generationComments, projects, sessions, tenants } from '../db/schema.js';
@@ -32,6 +36,20 @@ import {
  * recorder or an admin (contract role column "recorder, admin"). approve and
  * integrate are allowed for any tenant user (contract section 4.5).
  */
+/**
+ * Resolve the test type per the configurable-test-type cascade:
+ *   per-generation override -> project default -> tenant default -> 'ui'.
+ * A NULL project default means "inherit the tenant default". Pure so it can be
+ * unit-tested independently of the DB.
+ */
+export function resolveTestType(
+  override: TestType | undefined,
+  projectDefault: TestType | null | undefined,
+  tenantDefault: TestType | null | undefined,
+): TestType {
+  return override ?? projectDefault ?? tenantDefault ?? DEFAULT_TEST_TYPE;
+}
+
 @Injectable()
 export class CodegenService {
   constructor(
@@ -72,13 +90,14 @@ export class CodegenService {
    * generated.
    */
   private async resolveTarget(
-    input: { framework?: string; language?: string },
+    input: { framework?: string; language?: string; testType?: TestType },
     session: typeof sessions.$inferSelect,
-  ): Promise<{ framework: string; language: string }> {
+  ): Promise<{ framework: string; language: string; testType: TestType }> {
     const projRows = await this.ctx.dbTx
       .select({
         framework: projects.defaultTestFramework,
         language: projects.defaultTestLanguage,
+        testType: projects.defaultTestType,
       })
       .from(projects)
       .where(eq(projects.id, session.projectId))
@@ -89,6 +108,7 @@ export class CodegenService {
       .select({
         framework: tenants.defaultTestFramework,
         language: tenants.defaultTestLanguage,
+        testType: tenants.defaultTestType,
       })
       .from(tenants)
       .where(eq(tenants.id, session.tenantId))
@@ -99,6 +119,11 @@ export class CodegenService {
       framework:
         input.framework ?? proj?.framework ?? ten?.framework ?? DEFAULT_TEST_FRAMEWORK,
       language: input.language ?? proj?.language ?? ten?.language ?? DEFAULT_TEST_LANGUAGE,
+      testType: resolveTestType(
+        input.testType,
+        proj?.testType as TestType | null | undefined,
+        ten?.testType as TestType | null | undefined,
+      ),
     };
   }
 
@@ -149,7 +174,7 @@ export class CodegenService {
     session: typeof sessions.$inferSelect,
     kind: GenerateRequest['kind'],
     tier: ModelTier,
-    target: { framework: string; language: string },
+    target: { framework: string; language: string; testType: TestType },
     sourceCommentId?: string,
   ): Promise<JobResponse> {
     const createdBy = this.requireActingUser();
@@ -163,6 +188,7 @@ export class CodegenService {
       modelTier: tier,
       framework: target.framework,
       language: target.language,
+      testType: target.testType,
       ...(sourceCommentId ? { sourceCommentId } : {}),
     };
     await this.tasks.enqueueGenerate(payload);

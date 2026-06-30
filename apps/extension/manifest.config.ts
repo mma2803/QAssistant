@@ -49,6 +49,16 @@ export default defineManifest({
       run_at: 'document_start',
       all_frames: false,
     },
+    {
+      // Network interceptor in the page's MAIN world: the only context that can
+      // patch the page's own fetch/XHR (change: configurable-test-type). It posts
+      // captured calls to the isolated recorder via window.postMessage.
+      matches: ['<all_urls>'],
+      js: ['src/content/network-intercept.ts'],
+      run_at: 'document_start',
+      all_frames: false,
+      world: 'MAIN',
+    },
   ],
   permissions: ['storage', 'tabs', 'activeTab', 'scripting'],
   host_permissions: ['<all_urls>'],

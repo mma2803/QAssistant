@@ -40,6 +40,7 @@ import {
   MODEL_TIERS,
   REVIEW_STATUSES,
   INTEGRATION_STATUSES,
+  TEST_TYPES,
 } from '@qassistant/shared/enums';
 
 /** Build a SQL `col IN ('a','b')` CHECK predicate from an allowed-values tuple. */
@@ -69,12 +70,15 @@ export const tenants = pgTable(
     // a custom entry), so deliberately no CHECK constraint. See migration 0002.
     defaultTestFramework: text('default_test_framework').notNull().default('Playwright'),
     defaultTestLanguage: text('default_test_language').notNull().default('TypeScript'),
+    // Tenant-wide default test type (change: configurable-test-type). See migration 0008.
+    defaultTestType: text('default_test_type').notNull().default('ui'),
     createdAt,
     updatedAt,
   },
   (t) => ({
     gcipTenantIdUnique: uniqueIndex('tenants_gcip_tenant_id_key').on(t.gcipTenantId),
     statusCheck: check('tenants_status_check', inList('status', TENANT_STATUSES)),
+    testTypeCheck: check('tenants_default_test_type_check', inList('default_test_type', TEST_TYPES)),
   }),
 );
 
@@ -125,6 +129,8 @@ export const projects = pgTable(
     // (custom entry allowed), so no CHECK constraint. See migration 0004.
     defaultTestFramework: text('default_test_framework'),
     defaultTestLanguage: text('default_test_language'),
+    // Per-project default test type; NULL = inherit the tenant default. See migration 0008.
+    defaultTestType: text('default_test_type'),
     maskingSelectors: jsonb('masking_selectors').notNull().default(sql`'[]'::jsonb`),
     inactivityTimeoutSeconds: integer('inactivity_timeout_seconds').notNull().default(900),
     createdAt,
@@ -136,6 +142,8 @@ export const projects = pgTable(
     tenantIdUnique: uniqueIndex('projects_tenant_id_id_key').on(t.tenantId, t.id),
     tenantStatusIdx: index('projects_tenant_id_status_idx').on(t.tenantId, t.status),
     statusCheck: check('projects_status_check', inList('status', PROJECT_STATUSES)),
+    // NULL passes the CHECK (NULL IN (...) is NULL, not FALSE) → inherits tenant.
+    testTypeCheck: check('projects_default_test_type_check', inList('default_test_type', TEST_TYPES)),
   }),
 );
 
@@ -311,6 +319,8 @@ export const generatedTests = pgTable(
     // allowed), so no CHECK constraint. See migration 0002.
     framework: text('framework').notNull().default('Playwright'),
     language: text('language').notNull().default('TypeScript'),
+    // Test type this version was generated for (change: configurable-test-type). See migration 0008.
+    testType: text('test_type').notNull().default('ui'),
     reviewStatus: text('review_status').notNull().default('draft'),
     approvedBy: uuid('approved_by').references(() => tenantUsers.id, { onDelete: 'restrict' }),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
@@ -344,6 +354,7 @@ export const generatedTests = pgTable(
       name: 'generated_tests_tenant_project_fk',
     }).onDelete('restrict'),
     kindCheck: check('generated_tests_kind_check', inList('kind', GENERATED_TEST_KINDS)),
+    testTypeCheck: check('generated_tests_test_type_check', inList('test_type', TEST_TYPES)),
     modelTierCheck: check('generated_tests_model_tier_check', inList('model_tier', MODEL_TIERS)),
     reviewStatusCheck: check(
       'generated_tests_review_status_check',

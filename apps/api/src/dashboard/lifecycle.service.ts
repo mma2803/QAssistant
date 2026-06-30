@@ -169,6 +169,10 @@ export class LifecycleService {
         // Store the decoded JSON so the archive is directly replayable.
         const text = decodeArtifactText(bytes, a.compression as 'none' | 'gzip');
         zip.addFile(`dom/${a.seq}.json`, text);
+      } else if (a.type === 'network_log') {
+        // Captured HTTP traffic is JSON; store it decoded under net/.
+        const text = decodeArtifactText(bytes, a.compression as 'none' | 'gzip');
+        zip.addFile(`net/${a.seq}.json`, text);
       } else {
         zip.addFile(`shots/${a.seq}.webp`, bytes);
       }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 import { api } from '../lib/api';
 import { useAsync } from '../lib/useAsync';
@@ -18,6 +19,8 @@ export function SettingsPage(): JSX.Element {
   // the values) so selecting Custom sticks even when the current values still
   // happen to match a preset — otherwise the dropdown snaps back to the preset.
   const [customMode, setCustomMode] = useState(false);
+  // Tenant-wide default test type (change: configurable-test-type).
+  const [testType, setTestType] = useState<TestType>('ui');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -28,6 +31,7 @@ export function SettingsPage(): JSX.Element {
     if (settings.data) {
       setFramework(settings.data.defaultTestFramework);
       setLanguage(settings.data.defaultTestLanguage);
+      setTestType(settings.data.defaultTestType);
       const matches = TEST_FRAMEWORK_PRESETS.some(
         (p) =>
           p.framework === settings.data!.defaultTestFramework &&
@@ -65,9 +69,11 @@ export function SettingsPage(): JSX.Element {
       const updated = await api.setTenantSettings({
         defaultTestFramework: framework.trim(),
         defaultTestLanguage: language.trim(),
+        defaultTestType: testType,
       });
       setFramework(updated.defaultTestFramework);
       setLanguage(updated.defaultTestLanguage);
+      setTestType(updated.defaultTestType);
       settings.reload();
       setSaved(true);
     } catch (err) {
@@ -133,6 +139,20 @@ export function SettingsPage(): JSX.Element {
             </label>
           </div>
         )}
+
+        <label className="col" style={{ gap: 4 }}>
+          <span className="muted">Default test type</span>
+          <select
+            value={testType}
+            onChange={(e) => {
+              setTestType(e.target.value as TestType);
+              setSaved(false);
+            }}
+          >
+            <option value="ui">UI test (from the recorded DOM flow)</option>
+            <option value="backend">Back-end test (from captured API traffic)</option>
+          </select>
+        </label>
 
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
           <button className="primary" disabled={busy || !canSave} onClick={() => void onSave()}>

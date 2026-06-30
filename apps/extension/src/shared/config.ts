@@ -58,3 +58,22 @@ export const capture = {
    */
   defaultInactivityMs: 900_000,
 } as const;
+
+/**
+ * Network-capture tuning (change: configurable-test-type). Caps bound the volume
+ * a chatty page can produce; exceeding a cap truncates with a logged marker
+ * rather than dropping silently. Bodies are truncated per entry in the page
+ * interceptor; entry-count / total-size caps are enforced in the service worker.
+ */
+export const networkCapture = {
+  /** Max bytes kept per request body and per response body (truncated past this). */
+  maxBodyBytes: 32_768,
+  /** Max captured calls per session. */
+  maxEntries: 500,
+  /** Max total network-log size per session (sum of buffered+uploaded JSON bytes). */
+  maxTotalBytes: 5_242_880,
+  /** Flush buffered network entries to a chunk at least this often (ms). */
+  flushIntervalMs: 5_000,
+  /** Or sooner once this many entries accumulate. */
+  flushEntryThreshold: 50,
+} as const;

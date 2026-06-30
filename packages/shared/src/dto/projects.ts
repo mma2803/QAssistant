@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString, testFrameworkSchema, testLanguageSchema } from '../common.js';
+import { nonEmptyString, testFrameworkSchema, testLanguageSchema, testTypeSchema } from '../common.js';
 import { PROJECT_STATUSES } from '../enums.js';
 import { projectSchema, jiraConfigSchema } from '../entities.js';
 
@@ -40,12 +40,15 @@ export type SetKnowledgeRequest = z.infer<typeof setKnowledgeRequestSchema>;
 
 /**
  * PUT /projects/{projectId}/test-framework: per-project default codegen target
- * (change: configurable-test-framework). Open to any tenant user. null on either
- * field = inherit the tenant default for that field.
+ * (change: configurable-test-framework / configurable-test-type). Open to any
+ * tenant user. null on any field = inherit the tenant default for that field.
  */
 export const setProjectTestFrameworkRequestSchema = z.object({
   defaultTestFramework: testFrameworkSchema.nullable(),
   defaultTestLanguage: testLanguageSchema.nullable(),
+  // Per-project default test type. Optional so existing clients keep working;
+  // when present, null = inherit the tenant default, a value = set the override.
+  defaultTestType: testTypeSchema.nullable().optional(),
 });
 export type SetProjectTestFrameworkRequest = z.infer<typeof setProjectTestFrameworkRequestSchema>;
 

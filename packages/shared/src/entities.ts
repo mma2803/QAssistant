@@ -14,6 +14,7 @@ import {
   MODEL_TIERS,
   REVIEW_STATUSES,
   INTEGRATION_STATUSES,
+  TEST_TYPES,
 } from './enums.js';
 
 /**
@@ -29,6 +30,8 @@ export const tenantSchema = z.object({
   status: z.enum(TENANT_STATUSES),
   defaultTestFramework: z.string(),
   defaultTestLanguage: z.string(),
+  // Tenant-wide default test type (change: configurable-test-type).
+  defaultTestType: z.enum(TEST_TYPES),
   createdAt: isoTimestamp,
   updatedAt: isoTimestamp,
 });
@@ -59,6 +62,8 @@ export const projectSchema = z.object({
   // Per-project codegen default; null = inherit the tenant default.
   defaultTestFramework: z.string().nullable(),
   defaultTestLanguage: z.string().nullable(),
+  // Per-project default test type; null = inherit the tenant default (change: configurable-test-type).
+  defaultTestType: z.enum(TEST_TYPES).nullable(),
   maskingSelectors: z.array(z.string()),
   inactivityTimeoutSeconds: z.number().int().positive(),
   createdAt: isoTimestamp,
@@ -119,6 +124,36 @@ export const artifactSchema = z.object({
 });
 export type Artifact = z.infer<typeof artifactSchema>;
 
+/**
+ * One captured HTTP call inside a `network_log` artifact (change:
+ * configurable-test-type). Sensitive headers and secret body fields are
+ * redacted by the extension before upload; bodies are truncated past a cap and
+ * marked with `*Truncated` flags. This is the JSON shape stored in the gzipped
+ * `network_log` artifact and read back by the codegen worker for backend tests.
+ */
+export const networkLogEntrySchema = z.object({
+  method: z.string(),
+  url: z.string(),
+  status: z.number().int().nullable(),
+  requestHeaders: z.record(z.string()),
+  responseHeaders: z.record(z.string()),
+  requestBody: z.string().nullable(),
+  responseBody: z.string().nullable(),
+  requestBodyTruncated: z.boolean().optional(),
+  responseBodyTruncated: z.boolean().optional(),
+  startedAtMs: z.number().nullable(),
+  durationMs: z.number().nullable(),
+});
+export type NetworkLogEntry = z.infer<typeof networkLogEntrySchema>;
+
+/** A `network_log` artifact payload: a bounded batch of captured calls. */
+export const networkLogChunkSchema = z.object({
+  entries: z.array(networkLogEntrySchema),
+  // True when the session hit a cap (entries/bytes) and calls were dropped.
+  truncated: z.boolean().optional(),
+});
+export type NetworkLogChunk = z.infer<typeof networkLogChunkSchema>;
+
 export const flagSchema = z.object({
   id: uuid,
   tenantId: uuid,
@@ -137,6 +172,9 @@ export const promptInputsSummarySchema = z.object({
   // versions generated before the feature still validate.
   framework: z.string().optional(),
   language: z.string().optional(),
+  // Resolved test type (configurable-test-type). Optional so versions generated
+  // before the feature still validate (treated as `ui`).
+  testType: z.enum(TEST_TYPES).optional(),
   sources: z.array(
     z.object({
       label: z.string(),
@@ -159,6 +197,8 @@ export const generatedTestSchema = z.object({
   code: z.string(),
   framework: z.string(),
   language: z.string(),
+  // Resolved test type this version was generated for (change: configurable-test-type).
+  testType: z.enum(TEST_TYPES),
   reviewStatus: z.enum(REVIEW_STATUSES),
   approvedBy: uuid.nullable(),
   approvedAt: isoTimestamp.nullable(),

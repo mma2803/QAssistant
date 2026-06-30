@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
+import type { ArtifactType } from '@qassistant/shared/enums';
 import { APP_CONFIG } from '../config/config.module.js';
 import type { AppConfig } from '../config/config.service.js';
 
@@ -41,24 +42,30 @@ export const GCS_SIGNER = Symbol('GCS_SIGNER');
  * Build the canonical object path for an artifact under the session prefix
  * (contract section 7):
  *   <tenantId>/<projectId>/<sessionId>/<type-dir>/<seq>.<ext>
- *   dom_chunk  -> dom/<seq>.json.gz
- *   screenshot -> shots/<seq>.webp
+ *   dom_chunk   -> dom/<seq>.json.gz
+ *   screenshot  -> shots/<seq>.webp
+ *   network_log -> net/<seq>.json.gz
  */
 export function artifactObjectPath(params: {
   tenantId: string;
   projectId: string;
   sessionId: string;
-  type: 'dom_chunk' | 'screenshot';
+  type: ArtifactType;
   seq: number;
 }): string {
   const { tenantId, projectId, sessionId, type, seq } = params;
-  const leaf = type === 'dom_chunk' ? `dom/${seq}.json.gz` : `shots/${seq}.webp`;
+  const leaf =
+    type === 'dom_chunk'
+      ? `dom/${seq}.json.gz`
+      : type === 'network_log'
+        ? `net/${seq}.json.gz`
+        : `shots/${seq}.webp`;
   return `${tenantId}/${projectId}/${sessionId}/${leaf}`;
 }
 
 /** Default content type for an artifact type when the client omits one. */
-export function defaultContentType(type: 'dom_chunk' | 'screenshot'): string {
-  return type === 'dom_chunk' ? 'application/json' : 'image/webp';
+export function defaultContentType(type: ArtifactType): string {
+  return type === 'screenshot' ? 'image/webp' : 'application/json';
 }
 
 @Injectable()

@@ -1,4 +1,5 @@
-import type { UploadUrlsResponse } from '@qassistant/shared';
+import type { NetworkLogChunk, UploadUrlsResponse } from '@qassistant/shared';
+import type { ArtifactType } from '@qassistant/shared/enums';
 import { getUploadUrls, registerArtifact } from './api.js';
 
 /**
@@ -72,7 +73,35 @@ export async function uploadScreenshot(args: UploadScreenshotArgs): Promise<void
   });
 }
 
-function pickSlot(urls: UploadUrlsResponse, type: 'dom_chunk' | 'screenshot', seq: number) {
+export interface UploadNetworkLogArgs {
+  sessionId: string;
+  seq: number;
+  /** The network_log chunk (captured calls + truncation marker). */
+  chunk: NetworkLogChunk;
+  capturedAtIso: string;
+}
+
+export async function uploadNetworkLog(args: UploadNetworkLogArgs): Promise<void> {
+  const json = JSON.stringify(args.chunk);
+  const gz = await gzipString(json);
+  const urls = await getUploadUrls(args.sessionId, [{ type: 'network_log', seq: args.seq }]);
+  const slot = pickSlot(urls, 'network_log', args.seq);
+  await putToGcs(slot.uploadUrl, gz, {
+    ...slot.requiredHeaders,
+    'content-type': slot.requiredHeaders['content-type'] ?? 'application/gzip',
+  });
+  await registerArtifact(args.sessionId, {
+    type: 'network_log',
+    seq: args.seq,
+    gcsPath: slot.gcsPath,
+    contentType: 'application/json',
+    sizeBytes: gz.size,
+    compression: 'gzip',
+    capturedAt: args.capturedAtIso,
+  });
+}
+
+function pickSlot(urls: UploadUrlsResponse, type: ArtifactType, seq: number) {
   const slot = urls.items.find((i) => i.type === type && i.seq === seq) ?? urls.items[0];
   if (!slot) {
     throw new Error('No upload URL returned for requested artifact slot');

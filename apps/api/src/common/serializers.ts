@@ -57,6 +57,7 @@ export function toTenant(row: TenantRow): Tenant {
     status: row.status as TenantStatus,
     defaultTestFramework: row.defaultTestFramework,
     defaultTestLanguage: row.defaultTestLanguage,
+    defaultTestType: row.defaultTestType as Tenant['defaultTestType'],
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };
@@ -88,6 +89,7 @@ export function toProject(row: ProjectRow): Project {
     defaultCredsSecretRef: row.defaultCredsSecretRef,
     defaultTestFramework: row.defaultTestFramework,
     defaultTestLanguage: row.defaultTestLanguage,
+    defaultTestType: row.defaultTestType as Project['defaultTestType'],
     maskingSelectors: (row.maskingSelectors as string[] | null) ?? [],
     inactivityTimeoutSeconds: row.inactivityTimeoutSeconds,
     createdAt: iso(row.createdAt),

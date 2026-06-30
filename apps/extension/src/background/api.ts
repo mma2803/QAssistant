@@ -10,6 +10,7 @@ import type {
   UploadUrlsResponse,
   CompletePasswordChangeRequest,
 } from '@qassistant/shared';
+import type { ArtifactType } from '@qassistant/shared/enums';
 import { apiBase } from '../shared/config.js';
 import { getValidIdToken } from './auth.js';
 
@@ -103,7 +104,7 @@ export function stopSession(sessionId: string): Promise<Session> {
 
 export function getUploadUrls(
   sessionId: string,
-  items: { type: 'dom_chunk' | 'screenshot'; seq: number }[],
+  items: { type: ArtifactType; seq: number }[],
 ): Promise<UploadUrlsResponse> {
   // The contract models /upload-urls as GET with an `items` array (zod:
   // uploadUrlsRequestSchema). In the querystring that array uses qs bracket

@@ -176,6 +176,9 @@ async function handleContent(ev: ContentEvent): Promise<void> {
     case 'capture:events':
       await recording.ingestEvents(ev.sessionId, ev.events);
       break;
+    case 'capture:network':
+      await recording.ingestNetwork(ev.sessionId, ev.entry);
+      break;
     case 'capture:flag':
       await recording.flag(ev.sessionId, ev.selector, ev.eventOffsetMs, ev.note);
       break;

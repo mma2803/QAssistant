@@ -1,4 +1,5 @@
 import { record } from 'rrweb';
+import type { NetworkLogEntry } from '@qassistant/shared';
 import type { RecorderCommand, ContentEvent } from '../shared/messages.js';
 
 /**
@@ -276,6 +277,19 @@ document.addEventListener(
   },
   true,
 );
+
+// Relay captured network calls from the MAIN-world interceptor. The interceptor
+// always posts; we only forward to the service worker while recording, so the
+// network_log is scoped to the active session (change: configurable-test-type).
+window.addEventListener('message', (e: MessageEvent) => {
+  if (e.source !== window) return;
+  const data = e.data as { source?: string; entry?: NetworkLogEntry } | null;
+  if (!data || data.source !== 'qa-net-capture' || !data.entry) return;
+  if (!activeSessionId) return;
+  // Network is NOT user activity: analytics/polling fire while the tester is idle
+  // and must not keep the inactivity timer alive. Forward the call only.
+  send({ type: 'capture:network', sessionId: activeSessionId, entry: data.entry });
+});
 
 // Receive commands from the service worker.
 chrome.runtime.onMessage.addListener((msg: RecorderCommand | { type: 'recorder:flag' }) => {

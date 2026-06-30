@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Project } from '@qassistant/shared';
+import type { Project, TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 import { api } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
@@ -40,6 +40,8 @@ export function ProjectsPage(): JSX.Element {
   const [fwError, setFwError] = useState<string | null>(null);
   const [fwBusy, setFwBusy] = useState(false);
   const [fwSaved, setFwSaved] = useState(false);
+  // Per-project default test type. '' = inherit tenant default (change: configurable-test-type).
+  const [ttChoice, setTtChoice] = useState<'' | TestType>('');
 
   const current = (projects.data ?? []).find((p) => p.id === selected) ?? projects.data?.[0] ?? null;
 
@@ -69,23 +71,38 @@ export function ProjectsPage(): JSX.Element {
     setFwCustomLang(lang);
   }, [current?.id]);
 
+  // Seed the test-type selector: null -> inherit tenant default, else the value.
+  useEffect(() => {
+    setTtChoice(current?.defaultTestType ?? '');
+  }, [current?.id]);
+
   async function onSaveFramework(): Promise<void> {
     if (!current) return;
     setFwError(null);
     setFwBusy(true);
     setFwSaved(false);
     try {
-      let body: { defaultTestFramework: string | null; defaultTestLanguage: string | null };
+      let body: {
+        defaultTestFramework: string | null;
+        defaultTestLanguage: string | null;
+        defaultTestType: TestType | null;
+      };
+      const defaultTestType: TestType | null = ttChoice === '' ? null : ttChoice;
       if (fwChoice === '') {
-        body = { defaultTestFramework: null, defaultTestLanguage: null };
+        body = { defaultTestFramework: null, defaultTestLanguage: null, defaultTestType };
       } else if (fwChoice === 'custom') {
         body = {
           defaultTestFramework: fwCustomName.trim(),
           defaultTestLanguage: fwCustomLang.trim(),
+          defaultTestType,
         };
       } else {
         const preset = TEST_FRAMEWORK_PRESETS[Number(fwChoice)]!;
-        body = { defaultTestFramework: preset.framework, defaultTestLanguage: preset.language };
+        body = {
+          defaultTestFramework: preset.framework,
+          defaultTestLanguage: preset.language,
+          defaultTestType,
+        };
       }
       await api.setProjectTestFramework(current.id, body);
       projects.reload();
@@ -273,6 +290,20 @@ export function ProjectsPage(): JSX.Element {
                 />
               </div>
             )}
+            <label className="col" style={{ gap: 4 }}>
+              <span className="muted">Default test type</span>
+              <select
+                value={ttChoice}
+                onChange={(e) => {
+                  setTtChoice(e.target.value as '' | TestType);
+                  setFwSaved(false);
+                }}
+              >
+                <option value="">Inherit tenant default</option>
+                <option value="ui">UI test</option>
+                <option value="backend">Back-end test</option>
+              </select>
+            </label>
             <div className="row" style={{ gap: 12, alignItems: 'center' }}>
               <button
                 className="primary"

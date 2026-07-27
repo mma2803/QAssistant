@@ -103,6 +103,35 @@ async function createSuperAdmin(email: string, password: string): Promise<void> 
   }
 }
 
+/**
+ * Mint an access token for an existing subject directly via TokenService,
+ * bypassing the rate-limited POST /auth/login endpoint (the login route is
+ * throttled at 10/60s and this file already drives it close to that budget).
+ * The resulting token is a real DB-backed opaque token indistinguishable from
+ * one /auth/login would have issued, so HTTP calls made with it still exercise
+ * the real guard/revocation path end to end.
+ */
+async function issueAccessToken(
+  subjectType: 'tenant_user' | 'super_admin',
+  subjectId: string,
+): Promise<string> {
+  const [{ loadConfig }, { DbService }, { TokenService }] = await Promise.all([
+    import('../dist/config/config.service.js'),
+    import('../dist/db/db.service.js'),
+    import('../dist/auth/token.service.js'),
+  ]);
+  const config = loadConfig(process.env);
+  const db = new DbService(config);
+  await db.init();
+  try {
+    const tokens = new TokenService(config, db);
+    const pair = await tokens.issueTokenPair(subjectType, subjectId);
+    return pair.accessToken;
+  } finally {
+    await db.onModuleDestroy();
+  }
+}
+
 before(async () => {
   process.env.NODE_ENV = 'test';
   process.env.STORAGE_DRIVER = 's3';
@@ -269,6 +298,45 @@ describe('HTTP REST surface', () => {
     assert.equal(adminMe.body.role, 'admin');
     assert.equal(adminMe.body.tenantId, tenantId);
 
+    // Login edge cases (contract 4.2): wrong password, an email that doesn't
+    // exist, and a tenantSlug that doesn't exist all fail identically with a
+    // generic "Invalid credentials" message (auth-routes.service.ts calls
+    // verifyDummyPassword on every miss branch so failure timing doesn't leak
+    // which branch was hit). Uses request() directly, not signIn(), since
+    // these are expected to fail.
+    const wrongPassword = await request<{ error: { code: string; message: string } }>(
+      '/api/v1/auth/login',
+      { method: 'POST', body: { email: adminEmail, password: 'not-the-real-password', tenantSlug } },
+    );
+    assert.equal(wrongPassword.status, 401);
+    assert.deepEqual(wrongPassword.body, {
+      error: { code: 'unauthenticated', message: 'Invalid credentials' },
+    });
+
+    const unknownEmail = await request<{ error: { code: string; message: string } }>(
+      '/api/v1/auth/login',
+      {
+        method: 'POST',
+        body: { email: `nobody-${suffix}@example.test`, password: adminPassword, tenantSlug },
+      },
+    );
+    assert.equal(unknownEmail.status, 401);
+    assert.deepEqual(unknownEmail.body, {
+      error: { code: 'unauthenticated', message: 'Invalid credentials' },
+    });
+
+    const unknownTenantSlug = await request<{ error: { code: string; message: string } }>(
+      '/api/v1/auth/login',
+      {
+        method: 'POST',
+        body: { email: adminEmail, password: adminPassword, tenantSlug: `no-such-tenant-${suffix}` },
+      },
+    );
+    assert.equal(unknownTenantSlug.status, 401);
+    assert.deepEqual(unknownTenantSlug.body, {
+      error: { code: 'unauthenticated', message: 'Invalid credentials' },
+    });
+
     const qaCreated = await request<{ id: string }>('/api/v1/users', {
       method: 'POST',
       token: adminToken,
@@ -282,6 +350,14 @@ describe('HTTP REST surface', () => {
       body: { email: managedEmail, password: initialPassword, role: 'qa-engineer' },
     });
     assert.equal(managedCreated.status, 201);
+
+    // Capture the managed user's access token now, before they get disabled
+    // below, so we can prove the disable step revokes it. Minted directly
+    // (not via /auth/login) to avoid tripping the login route's own rate
+    // limit, which this file already drives close to its budget.
+    const managedToken = await issueAccessToken('tenant_user', managedCreated.body.id);
+    const managedMeBeforeDisable = await request('/api/v1/auth/me', { token: managedToken });
+    assert.equal(managedMeBeforeDisable.status, 200);
 
     const users = await request<unknown[]>('/api/v1/users', { token: adminToken });
     assert.equal(users.status, 200);
@@ -299,6 +375,18 @@ describe('HTTP REST surface', () => {
     assert.equal(managedUpdated.body.role, 'admin');
     assert.equal(managedUpdated.body.status, 'disabled');
 
+    // Disabling a user revokes every outstanding token for them
+    // (identity.service.ts's setTenantUserDisabled -> revokeAllForSubject), so
+    // the token captured before the disable step must now be rejected over HTTP.
+    const managedMeAfterDisable = await request<{ error: { code: string; message: string } }>(
+      '/api/v1/auth/me',
+      { token: managedToken },
+    );
+    assert.equal(managedMeAfterDisable.status, 401);
+    assert.deepEqual(managedMeAfterDisable.body, {
+      error: { code: 'unauthenticated', message: 'Invalid or expired token' },
+    });
+
     const reset = await request<{ mustChangePassword: boolean }>(
       `/api/v1/users/${managedCreated.body.id}/reset-password`,
       {
@@ -311,6 +399,20 @@ describe('HTTP REST surface', () => {
     assert.equal(reset.body.mustChangePassword, true);
 
     let qaToken = await signIn(qaEmail, initialPassword, tenantSlug);
+    const qaForcedMe = await request<{ mustChangePassword: boolean }>('/api/v1/auth/me', {
+      token: qaToken,
+    });
+    assert.equal(qaForcedMe.status, 200);
+    assert.equal(qaForcedMe.body.mustChangePassword, true);
+
+    // must_change_password gate applies to qa-engineer too, not just admin:
+    // a freshly-issued qa-engineer token is blocked from a normal authenticated
+    // route until the forced password change completes (mirrors the admin
+    // forcedGate assertion above).
+    const qaForcedGate = await request('/api/v1/projects', { token: qaToken });
+    assert.equal(qaForcedGate.status, 403);
+    assert.equal((qaForcedGate.body as { error: { code: string } }).error.code, 'must_change_password');
+
     const qaAdminDenied = await request('/api/v1/users', { token: qaToken });
     assert.equal(qaAdminDenied.status, 403);
     const qaChanged = await request('/api/v1/auth/complete-password-change', {

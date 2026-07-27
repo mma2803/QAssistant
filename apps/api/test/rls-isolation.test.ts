@@ -10,6 +10,17 @@
  *   5. a non-provisioned identity (no tenant_users row) resolves to no acting
  *      user, which the transaction interceptor treats as unauthenticated -> the
  *      DB analogue of "a non-provisioned email cannot sign in".
+ *   6. the tenant-settings feature (GET/PUT /tenant/settings) is not backed by
+ *      a separate `tenant_settings` table -- it reads/writes the default_test_*
+ *      columns on `tenants` itself (migrations 0002/0003/0008) -- so its
+ *      isolation is the tenant_self_read / tenant_self_update_defaults
+ *      policies on `tenants`, exercised here against those specific columns.
+ *   7. `codegen_jobs` has NO row-level-security policy at all (migration 0009
+ *      creates it without `ENABLE ROW LEVEL SECURITY` and grants app_user full
+ *      DML) -- a deliberate choice documented in cloud-tasks.service.ts
+ *      ("internal plumbing only ... always runs on the BYPASSRLS pool"). This
+ *      suite proves that fact against the schema rather than trusting the
+ *      comment: a tenant-scoped session can see another tenant's job row.
  *
  * Skips cleanly if no Postgres is reachable.
  */
@@ -273,6 +284,42 @@ describe('RLS cross-tenant isolation', () => {
     });
   });
 
+  it('tenant-settings defaults are invisible cross-tenant (no tenant_settings table -- columns on tenants)', async (t) => {
+    if (!reachable || !pools) return t.skip('no Postgres');
+    // The GET/PUT /tenant/settings API (TenantSettingsService) reads and writes
+    // default_test_framework/default_test_language/default_test_type directly
+    // on `tenants` -- there is no standalone `tenant_settings` table in the
+    // schema. Isolation therefore rides on the same tenant_self_read policy
+    // used above; assert it here against those specific columns.
+    await withTenant(pools, tenantA, async (c) => {
+      const rows = await c.query(
+        'SELECT id, default_test_framework, default_test_language, default_test_type FROM tenants WHERE id = $1',
+        [tenantB],
+      );
+      assert.equal(rows.rowCount, 0, 'tenant A cannot select tenant B settings row at all');
+    });
+  });
+
+  it('tenant A cannot update tenant B tenant-settings defaults (zero rows affected, not an error)', async (t) => {
+    if (!reachable || !pools) return t.skip('no Postgres');
+    // Migration 0003's tenant_self_update_defaults policy (FOR UPDATE, USING +
+    // WITH CHECK both `id = current_setting('app.tenant_id')`) scopes the
+    // column-level UPDATE grant on default_* columns to the caller's own row.
+    // app_user DOES have the column grant, so a mismatch is not a permission
+    // error -- it is an RLS-filtered zero-row UPDATE, same shape as the
+    // sessions/tenant_users cross-tenant UPDATE tests below.
+    await withTenant(pools, tenantA, async (c) => {
+      const res = await c.query("UPDATE tenants SET default_test_framework = 'Cypress' WHERE id = $1", [
+        tenantB,
+      ]);
+      assert.equal(res.rowCount, 0, 'tenant B row is invisible under tenant_self_update_defaults, so 0 rows updated');
+    });
+    await withTenant(pools, tenantB, async (c) => {
+      const r = await c.query('SELECT default_test_framework FROM tenants WHERE id = $1', [tenantB]);
+      assert.equal(r.rows[0].default_test_framework, 'Playwright', 'tenant B default framework unchanged');
+    });
+  });
+
   it('RLS WITH CHECK denies a cross-tenant insert', async (t) => {
     if (!reachable || !pools) return t.skip('no Postgres');
     // Acting as tenant A, try to insert a project tagged with tenant B's id.
@@ -486,6 +533,54 @@ describe('RLS cross-tenant isolation', () => {
         }),
       /row-level security|policy/i,
     );
+  });
+
+  it('codegen_jobs has no RLS policy at all (deliberate: internal plumbing, BYPASSRLS-only access)', async (t) => {
+    if (!reachable || !pools) return t.skip('no Postgres');
+    // Migration 0009 creates `codegen_jobs` with no `ENABLE ROW LEVEL SECURITY`
+    // / `FORCE ROW LEVEL SECURITY` and its trailing grants block explicitly
+    // hands app_user full SELECT/INSERT/UPDATE/DELETE on it alongside the other
+    // "platform/plumbing" tables, with the comment: "the four new tables ...
+    // No RLS is enabled on them (nothing here is queried by request-time
+    // tenant context)". cloud-tasks.service.ts makes the same claim at the
+    // call site ("No RLS on this table ... always runs on the BYPASSRLS
+    // pool") and both PostgresCloudTasksDispatcher.enqueueGenerate and
+    // CodegenPollerService's claim query use db.withSuperadmin exclusively --
+    // never a tenant-scoped transaction. Prove the absence of a policy
+    // directly (rather than trusting the comments): acting as tenant A on the
+    // RLS-enforced app_user pool, a plain SELECT must ALSO return tenant B's
+    // job row, because there is no tenant_isolation predicate to filter it.
+    // Isolation for this table is therefore an application-discipline
+    // guarantee (always go through the BYPASSRLS pool), not a DB-enforced one.
+    const jobA = newId();
+    const jobB = newId();
+    try {
+      await pools.superadmin.query(
+        `INSERT INTO codegen_jobs (id, tenant_id, session_id, payload, status)
+         VALUES ($1,$2,$3,$4::jsonb,'pending')`,
+        [jobA, tenantA, sessionA, JSON.stringify({ kind: 'generate' })],
+      );
+      await pools.superadmin.query(
+        `INSERT INTO codegen_jobs (id, tenant_id, session_id, payload, status)
+         VALUES ($1,$2,$3,$4::jsonb,'pending')`,
+        [jobB, tenantB, sessionB, JSON.stringify({ kind: 'generate' })],
+      );
+
+      await withTenant(pools, tenantA, async (c) => {
+        const rows = await c.query('SELECT id FROM codegen_jobs WHERE id = ANY($1)', [[jobA, jobB]]);
+        const ids = rows.rows.map((r) => r.id);
+        assert.ok(ids.includes(jobA), 'tenant A sees its own job');
+        assert.ok(
+          ids.includes(jobB),
+          'no RLS on codegen_jobs -> tenant A session ALSO sees tenant B job (proves no isolation policy exists)',
+        );
+      });
+    } finally {
+      // Clean up explicitly: codegen_jobs is not in cleanupTenants' table list,
+      // and its session_id FK (ON DELETE RESTRICT) would otherwise block the
+      // after() hook from deleting sessionA/sessionB.
+      await pools.superadmin.query('DELETE FROM codegen_jobs WHERE id = ANY($1)', [[jobA, jobB]]);
+    }
   });
 
   it('same-tenant child writes remain allowed by WITH CHECK', async (t) => {

@@ -15,6 +15,11 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      # packages/shared must be built before any dependent workspace can
+      # resolve its type declarations; `npm run build --workspaces` does not
+      # guarantee dependency order (it iterates apps/* before packages/*).
+      - name: Build packages/shared first
+        run: npm run build --workspace packages/shared
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
@@ -47,6 +52,8 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Build packages/shared first
+        run: npm run build --workspace packages/shared
       - name: Bring up postgres + minio
         run: npm run test:e2e:infra
       - run: npm run db:migrate

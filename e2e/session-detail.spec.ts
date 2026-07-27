@@ -16,11 +16,10 @@ test('reviews a recording and exercises the code-generation workflow', async ({ 
 
   await page.getByRole('button', { name: 'Approve' }).click();
   await expect(page.getByText('approved', { exact: true })).toBeVisible();
+  // Integration is read-only in the dashboard: only the MCP client (which owns
+  // the Git push) reports an integration outcome, so there is no Integrate
+  // button here.
   await expect(page.getByText('Ready to integrate', { exact: true })).toBeVisible();
-  // Integration prompts for the commit/PR URL; the client supplies it.
-  page.once('dialog', (dialog) => void dialog.accept('https://github.com/acme/e2e-tests/commit/abc123'));
-  await page.getByRole('button', { name: 'Integrate' }).click();
-  await expect(page.getByText('Integrated', { exact: true })).toBeVisible();
 
   await page.getByLabel('Comment to steer the next generation').fill('Use the visible receipt number.');
   await page.getByLabel('Target version (optional)').selectOption(ids.generation);
@@ -39,7 +38,6 @@ test('reviews a recording and exercises the code-generation workflow', async ({ 
     `GET /api/v1/dashboard/sessions/${ids.session}/replay`,
     `GET /api/v1/dashboard/sessions/${ids.session}/artifacts/${ids.artifact}`,
     `POST /api/v1/generations/${ids.generation}/approve`,
-    `POST /api/v1/generations/${ids.generation}/integrate`,
     `POST /api/v1/sessions/${ids.session}/comments`,
     `POST /api/v1/sessions/${ids.session}/regenerate`,
     `POST /api/v1/sessions/${ids.session}/generate`,

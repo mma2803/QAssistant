@@ -1,7 +1,8 @@
--- Local-dev bootstrap of the database roles described in the contract section 8.
--- In prod these roles are created by an initial migration (see apps/api migrations);
--- locally we also create them here so docker-compose postgres is ready for the
--- runtime app_user and the privileged app_superadmin connection out of the box.
+-- Local-dev-only bootstrap of the database roles described in the contract
+-- section 8. In prod, infra/vps/deploy.sh creates/reconciles these same
+-- roles using this server's real .env secrets on every deploy (not this
+-- script -- docker-entrypoint-initdb.d scripts only ever run once, on a
+-- brand new pgdata volume, and can't see the VPS's real passwords anyway).
 -- Passwords here match .env.example defaults and are for local emulators only.
 
 DO $$

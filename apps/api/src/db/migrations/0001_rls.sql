@@ -14,8 +14,8 @@
 -- superuser, even to re-assert an attribute a role already has. This
 -- migration runs as app_migrator (not superuser), so it must only touch
 -- BYPASSRLS when the role doesn't already have it — the bootstrap step
--- (docker-entrypoint-initdb.d/01-roles.sql locally; the same script mounted
--- into the prod Postgres container) already creates app_superadmin with
+-- (docker-entrypoint-initdb.d/01-roles.sql locally; infra/vps/deploy.sh's
+-- own role-reconcile step in prod) already creates app_superadmin with
 -- BYPASSRLS as the actual superuser, so this is normally a no-op.
 DO $$
 BEGIN

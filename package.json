@@ -21,7 +21,7 @@
     "db:generate": "npm run db:generate --workspace apps/api",
     "db:migrate": "npm run db:migrate --workspace apps/api",
     "test:e2e": "npm run test:e2e:infra && npm run test:e2e:browser && npm run test:e2e:api && npm run e2e:coverage",
-    "test:e2e:infra": "docker compose up -d --wait",
+    "test:e2e:infra": "docker compose up -d --wait postgres minio && docker compose up -d minio-init",
     "test:e2e:browser": "playwright test",
     "test:e2e:api": "REQUIRE_E2E_INFRA=true npm test --workspace @qassistant/api",
     "e2e:coverage": "node scripts/generate-e2e-coverage.mjs",

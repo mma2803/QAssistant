@@ -39,6 +39,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build --chown=appuser:appuser /app/node_modules ./node_modules
 COPY --from=build --chown=appuser:appuser /app/package.json ./package.json
+COPY --from=build --chown=appuser:appuser /app/tsconfig.base.json ./tsconfig.base.json
 COPY --from=build --chown=appuser:appuser /app/packages/shared ./packages/shared
 COPY --from=build --chown=appuser:appuser /app/apps/api ./apps/api
 

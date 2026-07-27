@@ -5,7 +5,8 @@
 #
 # Does NOT write the persistent .env (that has real secrets and is generated
 # separately, once, and never committed) and does NOT deploy the app — it
-# only prepares the box so infra/vps/deploy.sh can do that on every push.
+# only prepares the box so infra/vps/deploy-entrypoint.sh can do that on
+# every push.
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-}"
@@ -82,7 +83,7 @@ Bootstrap complete. Remaining manual steps (see openspec change design.md):
      ability to decrypt stored secrets / restore backups.
   2. Restrict the deploy SSH key: append it to
      /home/$DEPLOY_USER/.ssh/authorized_keys as a single line prefixed with
-       command="$APP_DIR/app/infra/vps/deploy.sh \$SSH_ORIGINAL_COMMAND",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty
+       command="$APP_DIR/app/infra/vps/deploy-entrypoint.sh \$SSH_ORIGINAL_COMMAND",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty
      followed by the public key. sshd expands \$SSH_ORIGINAL_COMMAND to
      whatever the CI ssh call passes as its trailing command (the
      "<sha> <api-image> <web-image>" args) — the client can never get an

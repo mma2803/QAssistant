@@ -59,6 +59,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      packages: read
     steps:
       - name: Deploy over SSH
         env:
@@ -68,6 +70,13 @@ jobs:
           DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
           DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          GHCR_USERNAME: ${{ github.actor }}
+          # The packages stay private (never made public) — this job's own
+          # GITHUB_TOKEN is scoped to just this run and expires when it ends,
+          # so it's passed through the already-encrypted SSH channel for the
+          # VPS to `docker login` with, rather than storing any standing pull
+          # credential in the server's .env.
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           install -m 600 -D /dev/null "$RUNNER_TEMP/deploy_key"
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/deploy_key"
@@ -76,4 +85,4 @@ jobs:
           # that forced command receives, no interactive shell is possible.
           ssh -i "$RUNNER_TEMP/deploy_key" -o StrictHostKeyChecking=accept-new \
             "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" \
-            "$SHA" "$API_IMAGE" "$WEB_IMAGE"
+            "$SHA" "$API_IMAGE" "$WEB_IMAGE" "$GHCR_USERNAME" "$GHCR_TOKEN"

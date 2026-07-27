@@ -31,7 +31,10 @@ services:
       -c max_connections=30
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./infra/local/postgres-init:/docker-entrypoint-initdb.d:ro
+    # No docker-entrypoint-initdb.d mount here: infra/local/postgres-init is
+    # for local dev only (hardcoded dev passwords). deploy.sh's own
+    # "Ensuring DB roles exist" step creates/reconciles roles with this
+    # server's real .env secrets on every deploy instead.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_BOOTSTRAP_USER:-postgres} -d ${DB_NAME:-qassistant}"]
       interval: 5s

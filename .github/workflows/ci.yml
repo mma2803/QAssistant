@@ -61,6 +61,21 @@ jobs:
       - run: npm run test:e2e:browser
       - run: npm run test:e2e:api
       - run: npm run e2e:coverage
+      # Playwright always records video now (playwright.config.ts: video: 'on'),
+      # not just on failure -- upload it (plus screenshots/traces and the HTML
+      # report) so a run's videos are actually retrievable afterward instead of
+      # being discarded with the runner. if: always() so this still runs (and
+      # a failing run's videos are the ones you most want) even if a prior step
+      # failed.
+      - name: Upload Playwright report and test results (videos, traces, screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
       - name: Tear down
         if: always()
         run: npm run dev:infra:down

@@ -26,7 +26,10 @@ test('browses, filters, exports, and deletes recordings', async ({ page }) => {
 });
 
 test('shows project context and renders escaped markdown', async ({ page }) => {
-  await installMockApi(page);
+  // The "no overview written" placeholder only renders on the read-only
+  // (qa-engineer) branch of ProjectsPage; the admin branch shows an editable,
+  // possibly-empty textarea instead with no placeholder message.
+  await installMockApi(page, { role: 'qa-engineer' });
   await page.goto('/projects');
 
   await expect(page.getByRole('heading', { name: 'Project context' })).toBeVisible();

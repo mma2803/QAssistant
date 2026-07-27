@@ -98,7 +98,6 @@ export const users = [
   {
     id: ids.qa,
     tenantId: ids.tenant,
-    gcipUid: 'qa-uid',
     email: 'qa@example.test',
     role: 'qa-engineer',
     status: 'active',
@@ -149,6 +148,39 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
     if (method === 'GET' && url.pathname === '/api/v1/auth/me') {
       return json(route, me(role, mustChangePassword));
     }
+    if (method === 'POST' && url.pathname === '/api/v1/auth/login') {
+      return json(
+        route,
+        {
+          accessToken: 'mock-access-token',
+          refreshToken: 'mock-refresh-token',
+          uid: role === 'admin' ? 'admin-uid' : 'qa-uid',
+          role,
+          tenantId: ids.tenant,
+          mustChangePassword,
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        },
+        201,
+      );
+    }
+    if (method === 'POST' && url.pathname === '/api/v1/auth/refresh') {
+      return json(
+        route,
+        {
+          accessToken: 'mock-access-token',
+          refreshToken: 'mock-refresh-token',
+          uid: role === 'admin' ? 'admin-uid' : 'qa-uid',
+          role,
+          tenantId: ids.tenant,
+          mustChangePassword,
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        },
+        201,
+      );
+    }
+    if (method === 'POST' && url.pathname === '/api/v1/auth/logout') {
+      return json(route, { ok: true }, 201);
+    }
     if (method === 'POST' && url.pathname === '/api/v1/auth/complete-password-change') {
       mustChangePassword = false;
       return json(route, me(role, false));
@@ -171,7 +203,7 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
         durationSeconds: 300,
         artifacts: [
           { id: ids.domArtifact, tenantId: ids.tenant, projectId: ids.project, sessionId: ids.session, type: 'dom_chunk', seq: 0, gcsPath: 'dom.json', contentType: 'application/json', sizeBytes: 2, checksum: null, compression: 'none', capturedAt: now, createdAt: now, updatedAt: now },
-          { id: ids.artifact, tenantId: ids.tenant, projectId: ids.project, sessionId: ids.session, type: 'screenshot', seq: 1, gcsPath: 'shot.png', contentType: 'image/png', sizeBytes: 68, checksum: null, compression: 'none', capturedAt: now, createdAt: now, updatedAt: now },
+          { id: ids.artifact, tenantId: ids.tenant, projectId: ids.project, sessionId: ids.session, type: 'screenshot', seq: 0, gcsPath: 'shot.png', contentType: 'image/png', sizeBytes: 68, checksum: null, compression: 'none', capturedAt: now, createdAt: now, updatedAt: now },
         ],
         flags: [{ id: ids.flag, tenantId: ids.tenant, projectId: ids.project, sessionId: ids.session, selector: '[data-testid=success]', note: 'Success state', eventOffsetMs: 4200, createdAt: now, updatedAt: now }],
         generations: [currentGeneration],
@@ -220,7 +252,7 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
     }
     if (method === 'GET' && url.pathname === '/api/v1/users') return json(route, currentUsers);
     if (method === 'POST' && url.pathname === '/api/v1/users') {
-      const created = { ...users[0], id: ids.admin, gcipUid: 'new-uid', email: body && typeof body === 'object' && 'email' in body ? String(body.email) : 'new@example.test', role: body && typeof body === 'object' && 'role' in body ? body.role : 'qa-engineer', mustChangePassword: true };
+      const created = { ...users[0], id: ids.admin, email: body && typeof body === 'object' && 'email' in body ? String(body.email) : 'new@example.test', role: body && typeof body === 'object' && 'role' in body ? body.role : 'qa-engineer', mustChangePassword: true };
       currentUsers = [...currentUsers, created];
       return json(route, created, 201);
     }

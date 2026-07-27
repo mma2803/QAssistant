@@ -25,13 +25,13 @@ import type {
   UpdateTenantSettingsRequest,
   ErrorEnvelope,
 } from '@qassistant/shared';
-import { getIdToken } from './firebase';
+import { getAccessToken } from './auth-client';
 
 /**
- * Small typed REST client. Every request carries the verified Identity Platform
- * ID token; the backend derives tenant/role/uid from it (the client never
- * asserts identity). Response bodies are the shared DTO types, so the dashboard
- * and backend cannot drift on shape.
+ * Small typed REST client. Every request carries the bearer access token; the
+ * backend derives tenant/role/uid from it (the client never asserts
+ * identity). Response bodies are the shared DTO types, so the dashboard and
+ * backend cannot drift on shape.
  */
 // An empty VITE_API_BASE_URL (the .env.example default for same-origin dev via
 // the Vite proxy) must fall back to '/api' just like an unset one; `??` only
@@ -62,7 +62,7 @@ async function request<T>(
   body?: unknown,
   query?: Record<string, string | number | undefined>,
 ): Promise<T> {
-  const token = await getIdToken();
+  const token = await getAccessToken();
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -104,7 +104,7 @@ async function request<T>(
 
 /** Download a binary response (the session export ZIP) as a Blob. */
 async function downloadBlob(path: string): Promise<{ blob: Blob; filename: string }> {
-  const token = await getIdToken();
+  const token = await getAccessToken();
   const res = await fetch(new URL(BASE + path, window.location.origin).toString(), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -123,7 +123,7 @@ async function downloadBlob(path: string): Promise<{ blob: Blob; filename: strin
  * here and rendered via an object URL (see AuthImage).
  */
 async function fetchArtifactBlob(path: string): Promise<Blob> {
-  const token = await getIdToken();
+  const token = await getAccessToken();
   const res = await fetch(new URL(BASE + path, window.location.origin).toString(), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });

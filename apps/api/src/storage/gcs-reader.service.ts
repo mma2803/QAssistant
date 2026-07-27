@@ -10,12 +10,12 @@ import type { AppConfig } from '../config/config.service.js';
  * URLs; this reads the same objects server-side.
  *
  * Two drivers behind one interface so the worker runs offline:
- *   - 'gcs'   : @google-cloud/storage download() (loaded dynamically so the
- *               package stays an optional runtime dep, matching CloudGcsSigner).
- *   - 'local' : reads from the same fake-gcs/local sink the LocalGcsSigner writes
- *               to, by HTTP GET against LOCAL_UPLOAD_BASE_URL/<bucket>/<path>.
- *               If the object is absent (no live sink in tests) it returns null
- *               so the worker degrades gracefully rather than throwing.
+ *   - 's3'    : S3-compatible GetObjectCommand (@aws-sdk/client-s3), pointed at
+ *               MinIO in prod (self-hosted VPS migration; replaces GCS).
+ *   - 'local' : reads from the same local sink the LocalGcsSigner writes to, by
+ *               HTTP GET against LOCAL_UPLOAD_BASE_URL/<bucket>/<path>. If the
+ *               object is absent (no live sink in tests) it returns null so the
+ *               worker degrades gracefully rather than throwing.
  */
 export interface GcsReader {
   /** Download raw object bytes for a path, or null if it does not exist. */
@@ -37,7 +37,7 @@ export class LocalGcsReader implements GcsReader {
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     this.bucket = config.ARTIFACTS_BUCKET;
-    this.base = config.STORAGE_EMULATOR_HOST ?? config.LOCAL_UPLOAD_BASE_URL;
+    this.base = config.LOCAL_UPLOAD_BASE_URL;
   }
 
   async download(gcsPath: string): Promise<Buffer | null> {
@@ -57,29 +57,40 @@ export class LocalGcsReader implements GcsReader {
 }
 
 @Injectable()
-export class CloudGcsReader implements GcsReader {
+export class S3GcsReader implements GcsReader {
   private readonly bucket: string;
-  private storage: any;
+  private client: any;
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     this.bucket = config.ARTIFACTS_BUCKET;
   }
 
-  private async getStorage(): Promise<any> {
-    if (this.storage) return this.storage;
-    const mod: any = await import('@google-cloud/storage' as string);
-    this.storage = new mod.Storage();
-    return this.storage;
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client;
+    const mod: any = await import('@aws-sdk/client-s3' as string);
+    this.client = new mod.S3Client({
+      endpoint: this.config.S3_ENDPOINT,
+      region: this.config.S3_REGION,
+      forcePathStyle: this.config.S3_FORCE_PATH_STYLE,
+      credentials: {
+        accessKeyId: this.config.S3_ACCESS_KEY_ID,
+        secretAccessKey: this.config.S3_SECRET_ACCESS_KEY,
+      },
+    });
+    return this.client;
   }
 
   async download(gcsPath: string): Promise<Buffer | null> {
-    const storage = await this.getStorage();
-    const file = storage.bucket(this.bucket).file(gcsPath);
+    const mod: any = await import('@aws-sdk/client-s3' as string);
+    const client = await this.getClient();
     try {
-      const [contents] = await file.download();
-      return contents as Buffer;
+      const result = await client.send(
+        new mod.GetObjectCommand({ Bucket: this.bucket, Key: gcsPath }),
+      );
+      const bytes = await result.Body.transformToByteArray();
+      return Buffer.from(bytes);
     } catch (err: any) {
-      if (err?.code === 404) return null;
+      if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) return null;
       throw err;
     }
   }

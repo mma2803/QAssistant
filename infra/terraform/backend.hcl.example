@@ -1,5 +1,0 @@
-# Remote state backend config. bootstrap-gcp.sh generates the real backend.hcl
-# with the resolved bucket name. Use with:
-#   terraform init -backend-config=backend.hcl
-bucket = "qassistant-tfstate-my-gcp-project-id"
-prefix = "qassistant/mvp"

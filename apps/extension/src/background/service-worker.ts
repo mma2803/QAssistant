@@ -6,7 +6,7 @@ import type {
   Result,
   ActiveSessionState,
 } from '../shared/messages.js';
-import { signIn, signOut, updatePassword, getValidIdToken, decodeJwt } from './auth.js';
+import { signIn, signOut, getValidAccessToken } from './auth.js';
 import { readTokens } from './storage.js';
 import { ApiError, getMe, completePasswordChange, listProjects } from './api.js';
 import * as recording from './recording.js';
@@ -48,8 +48,8 @@ async function currentAuthState(): Promise<AuthState> {
       mustChangePassword: false,
     };
   }
-  // Prefer authoritative claims from the backend /auth/me; fall back to the
-  // locally decoded token if the API is unreachable.
+  // Prefer authoritative state from the backend /auth/me; fall back to the
+  // locally stored tokens (captured at sign-in/refresh time) if unreachable.
   try {
     const me = await getMe();
     return {
@@ -62,24 +62,22 @@ async function currentAuthState(): Promise<AuthState> {
     };
   } catch (err) {
     if (err instanceof ApiError && err.code === 'must_change_password') {
-      const claims = decodeJwt(tokens.idToken);
       return {
         signedIn: true,
         uid: tokens.uid,
         email: tokens.email,
-        role: (claims.role as AuthState['role']) ?? null,
-        tenantId: (claims.tenantId as string | null) ?? null,
+        role: tokens.role,
+        tenantId: tokens.tenantId,
         mustChangePassword: true,
       };
     }
-    const claims = decodeJwt(tokens.idToken);
     return {
       signedIn: true,
       uid: tokens.uid,
       email: tokens.email,
-      role: (claims.role as AuthState['role']) ?? null,
-      tenantId: (claims.tenantId as string | null) ?? null,
-      mustChangePassword: Boolean(claims.mustChangePassword),
+      role: tokens.role,
+      tenantId: tokens.tenantId,
+      mustChangePassword: tokens.mustChangePassword,
     };
   }
 }
@@ -108,15 +106,14 @@ async function handlePopup(req: PopupRequest): Promise<Result<unknown>> {
         return { ok: true, data: await currentAuthState() };
 
       case 'auth:signIn': {
-        await signIn(req.email, req.password, req.tenantId);
+        await signIn(req.email, req.password, req.tenantSlug);
         return { ok: true, data: await currentAuthState() };
       }
 
       case 'auth:completePasswordChange': {
-        // Set the new password in GCIP, then clear the backend marker. Capture
-        // is blocked by the server until mustChangePassword is cleared, so this
-        // must succeed before any session can start (task 3.2).
-        await updatePassword(req.newPassword);
+        // The backend sets the new password hash and clears the marker in one
+        // call. Capture is blocked by the server until mustChangePassword is
+        // cleared, so this must succeed before any session can start (task 3.2).
         await completePasswordChange(req.newPassword);
         return { ok: true, data: await currentAuthState() };
       }
@@ -227,4 +224,4 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 // Keep tokens warm so the first capture call doesn't stall on a cold refresh.
-void getValidIdToken();
+void getValidAccessToken();

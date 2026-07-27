@@ -16,7 +16,7 @@ import {
  * Live Jira validation at session start (contract section 5; spec
  * "Work-context-gated session start"). Steps:
  *   1. Require an ACTIVE jira_configs row for the project, else block.
- *   2. Read the read-only token from Secret Manager (token_secret_ref).
+ *   2. Read the read-only token from the encrypted secrets store (token_secret_ref).
  *   3. Call Jira read-only: issue exists, load summary/status, and confirm the
  *      issue's project key equals jira_configs.project_key.
  *   4. On success, return the snapshot the caller freezes onto the session.

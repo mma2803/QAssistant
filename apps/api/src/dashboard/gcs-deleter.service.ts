@@ -8,7 +8,8 @@ import type { AppConfig } from '../config/config.service.js';
  *
  * Kept local to the dashboard module so the foundation-owned StorageModule is
  * not modified. Two drivers mirror the reader/signer pattern:
- *   - 'gcs'   : @google-cloud/storage delete (loaded dynamically).
+ *   - 's3'    : S3-compatible DeleteObjectCommand (@aws-sdk/client-s3), pointed
+ *               at MinIO in prod (self-hosted VPS migration; replaces GCS).
  *   - 'local' : best-effort HTTP DELETE against the local sink; missing objects
  *               and an unreachable sink are treated as success (idempotent purge).
  */
@@ -26,7 +27,7 @@ export class LocalGcsDeleter implements GcsDeleter {
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     this.bucket = config.ARTIFACTS_BUCKET;
-    this.base = config.STORAGE_EMULATOR_HOST ?? config.LOCAL_UPLOAD_BASE_URL;
+    this.base = config.LOCAL_UPLOAD_BASE_URL;
   }
 
   async delete(gcsPath: string): Promise<void> {
@@ -41,28 +42,37 @@ export class LocalGcsDeleter implements GcsDeleter {
 }
 
 @Injectable()
-export class CloudGcsDeleter implements GcsDeleter {
+export class S3GcsDeleter implements GcsDeleter {
   private readonly bucket: string;
-  private storage: any;
+  private client: any;
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     this.bucket = config.ARTIFACTS_BUCKET;
   }
 
-  private async getStorage(): Promise<any> {
-    if (this.storage) return this.storage;
-    const mod: any = await import('@google-cloud/storage' as string);
-    this.storage = new mod.Storage();
-    return this.storage;
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client;
+    const mod: any = await import('@aws-sdk/client-s3' as string);
+    this.client = new mod.S3Client({
+      endpoint: this.config.S3_ENDPOINT,
+      region: this.config.S3_REGION,
+      forcePathStyle: this.config.S3_FORCE_PATH_STYLE,
+      credentials: {
+        accessKeyId: this.config.S3_ACCESS_KEY_ID,
+        secretAccessKey: this.config.S3_SECRET_ACCESS_KEY,
+      },
+    });
+    return this.client;
   }
 
   async delete(gcsPath: string): Promise<void> {
-    const storage = await this.getStorage();
-    const file = storage.bucket(this.bucket).file(gcsPath);
+    const mod: any = await import('@aws-sdk/client-s3' as string);
+    const client = await this.getClient();
     try {
-      await file.delete({ ignoreNotFound: true });
+      // S3 delete is already idempotent/no-error-on-missing-key, unlike GCS.
+      await client.send(new mod.DeleteObjectCommand({ Bucket: this.bucket, Key: gcsPath }));
     } catch (err: any) {
-      if (err?.code === 404) return;
+      if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) return;
       throw err;
     }
   }

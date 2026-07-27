@@ -223,7 +223,7 @@ test('disabled users expose an Enable action', async ({ page }) => {
   await installMockApi(page, {
     handleRequest: async (route, request) => {
       if (request.method === 'GET' && request.pathname === '/api/v1/users') {
-        await route.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: ids.qa, tenantId: ids.tenant, gcipUid: 'qa-uid', email: 'disabled@example.test', role: 'qa-engineer', status: 'disabled', mustChangePassword: false, createdAt: '2026-06-14T10:00:00.000Z', updatedAt: '2026-06-14T10:00:00.000Z' }]) });
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: ids.qa, tenantId: ids.tenant, email: 'disabled@example.test', role: 'qa-engineer', status: 'disabled', mustChangePassword: false, createdAt: '2026-06-14T10:00:00.000Z', updatedAt: '2026-06-14T10:00:00.000Z' }]) });
         return true;
       }
       return false;

@@ -11,15 +11,15 @@ agents. They are empty on purpose. Each feature module should:
     (`ctx.dbTx`) and the `withTenant` / `withSuperadmin` wrappers;
   - `RequestContext` (`auth/request-context.ts`) for the verified actor
     (`uid`, `role`, `tenantId`, `actingUserId`) and `dbTx`;
-  - `FirebaseService` (`auth/firebase.service.ts`) for Admin SDK calls
+  - `IdentityService` (`auth/identity.service.ts`) for tenant_users/super_admins management, `TokenService` (`auth/token.service.ts`) for opaque bearer tokens
     (user management, custom claims);
 - annotate routes with the auth decorators (`auth/decorators.ts`):
   - `@SuperAdminOnly()` for `/admin/*` provisioning;
   - `@Roles('admin')` / `@Roles('admin','qa-engineer')` for tenant routes;
   - `@AllowDuringPasswordChange()` for `/auth/complete-password-change` and
     `/auth/me`;
-  - `@Public()` for Cloud Tasks OIDC worker endpoints (which verify their own
-    OIDC token) and health;
+  - `@Public()` for internal worker endpoints (which verify their own
+    internal task token) and health;
 - throw `AppException(code, message, status)` (`auth/errors.ts`) to emit the
   contract error envelope;
 - register itself in `app.module.ts` `FEATURE_MODULES` ONLY during the

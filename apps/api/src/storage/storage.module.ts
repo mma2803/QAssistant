@@ -4,13 +4,13 @@ import type { AppConfig } from '../config/config.service.js';
 import {
   GCS_SIGNER,
   LocalGcsSigner,
-  CloudGcsSigner,
+  S3GcsSigner,
   type GcsSigner,
 } from './gcs-signer.service.js';
 import {
   GCS_READER,
   LocalGcsReader,
-  CloudGcsReader,
+  S3GcsReader,
   type GcsReader,
 } from './gcs-reader.service.js';
 
@@ -25,17 +25,13 @@ import {
     {
       provide: GCS_SIGNER,
       useFactory: (config: AppConfig): GcsSigner =>
-        config.STORAGE_DRIVER === 'gcs'
-          ? new CloudGcsSigner(config)
-          : new LocalGcsSigner(config),
+        config.STORAGE_DRIVER === 's3' ? new S3GcsSigner(config) : new LocalGcsSigner(config),
       inject: [APP_CONFIG],
     },
     {
       provide: GCS_READER,
       useFactory: (config: AppConfig): GcsReader =>
-        config.STORAGE_DRIVER === 'gcs'
-          ? new CloudGcsReader(config)
-          : new LocalGcsReader(config),
+        config.STORAGE_DRIVER === 's3' ? new S3GcsReader(config) : new LocalGcsReader(config),
       inject: [APP_CONFIG],
     },
   ],

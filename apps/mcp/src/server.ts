@@ -14,7 +14,7 @@ import { ApiClient } from './api-client.js';
 const INSTRUCTIONS = `QAssistant MCP server. Guide the user step by step.
 
 FIRST CONTACT: if the user has not authenticated yet, ask them for their
-email, password, and tenantId (or point them at the \`connect\` prompt), then
+email, password, and tenant slug (or point them at the \`connect\` prompt), then
 call \`authenticate\`. Do not call any other tool before authentication.
 
 AFTER AUTHENTICATION: present a short menu of what they can do and ask which
@@ -76,16 +76,16 @@ export function buildServer(config: McpConfig): McpServer {
 
   server.tool(
     'authenticate',
-    'Open a session: exchange email/password (+ GCIP tenantId) for a token. ' +
+    'Open a session: exchange email/password (+ tenant slug) for a token. ' +
       'Required before any other tool. Acts strictly within that tenant/user.',
     {
       email: z.string().email(),
       password: z.string().min(1),
-      tenantId: z.string().min(1).optional(),
+      tenantSlug: z.string().min(1).optional(),
     },
-    async ({ email, password, tenantId }) => {
+    async ({ email, password, tenantSlug }) => {
       try {
-        await auth.authenticate(email, password, tenantId);
+        await auth.authenticate(email, password, tenantSlug);
         return jsonContent({ authenticated: true, tenantId: auth.currentTenantId() });
       } catch (err) {
         return errorContent(err instanceof Error ? err.message : String(err));
@@ -174,13 +174,13 @@ export function buildServer(config: McpConfig): McpServer {
 
   server.prompt(
     'connect',
-    'Sign in to QAssistant: fill your email, password, and tenantId.',
+    'Sign in to QAssistant: fill your email, password, and tenant slug.',
     {
       email: z.string().describe('Your QAssistant account email'),
       password: z.string().describe('Your password'),
-      tenantId: z.string().describe('Your GCIP tenant id'),
+      tenantSlug: z.string().describe('Your tenant slug'),
     },
-    ({ email, password, tenantId }) => ({
+    ({ email, password, tenantSlug }) => ({
       messages: [
         {
           role: 'user' as const,
@@ -188,7 +188,7 @@ export function buildServer(config: McpConfig): McpServer {
             type: 'text' as const,
             text:
               `Call the \`authenticate\` tool with email="${email}", ` +
-              `password="${password}", tenantId="${tenantId}". After it succeeds, ` +
+              `password="${password}", tenantSlug="${tenantSlug}". After it succeeds, ` +
               `show me the menu of what I can do next.`,
           },
         },

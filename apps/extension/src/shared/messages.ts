@@ -43,7 +43,7 @@ export interface MaskingConfig {
 
 export type PopupRequest =
   | { type: 'auth:getState' }
-  | { type: 'auth:signIn'; email: string; password: string; tenantId?: string }
+  | { type: 'auth:signIn'; email: string; password: string; tenantSlug?: string }
   | { type: 'auth:completePasswordChange'; newPassword: string }
   | { type: 'auth:signOut' }
   | { type: 'projects:list' }

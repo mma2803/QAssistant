@@ -6,18 +6,21 @@ shared zod DTO types in `@qassistant/shared` and the backend `/api/v1` surface.
 ## Run
 
 ```bash
-cp .env.example .env        # fill in Identity Platform web config / emulator host
+cp .env.example .env
 npm run dev --workspace @qassistant/dashboard
 ```
 
 The dev server proxies `/api` to the backend (`VITE_API_PROXY_TARGET`, default
-`http://127.0.0.1:8080`), so the browser talks same-origin and the verified ID
-token flows through unchanged.
+`http://127.0.0.1:8080`), so the browser talks same-origin and the access
+token flows through unchanged. In prod, Caddy serves the dashboard and
+reverse-proxies the API from the same origin, so no proxy config is needed there.
 
 ## Structure
 
-- `src/lib/firebase.ts` Identity Platform email/password sign-in, forced
-  password-change, ID-token retrieval, emulator support.
+- `src/lib/auth-client.ts` self-hosted email/password sign-in against the
+  backend's own `/auth/login|refresh|logout`, forced password-change, access
+  token kept in memory only (the refresh token is an httpOnly cookie the
+  browser sends automatically — this file never reads or stores it).
 - `src/lib/api.ts` typed REST client (bearer token attached automatically).
 - `src/auth/AuthContext.tsx` bootstraps `/auth/me`, exposes role + the
   mustChangePassword gate.
@@ -27,7 +30,7 @@ token flows through unchanged.
 - `src/pages/` SessionsPage, SessionDetailPage (inline rrweb replay, screenshots,
   flags, summary, generations with approve/integrate + comment/regenerate),
   MetricsPage (productivity + directional Contribution ranking), ProjectsPage
-  (knowledge-hub markdown), UsersPage (Admin SDK-backed user management).
+  (knowledge-hub markdown), UsersPage (backend-managed user provisioning).
 - `src/components/ReplayPlayer.tsx` rrweb player; `src/components/AuthImage.tsx`
   renders a screenshot by fetching its bytes over the authenticated API and
   wrapping them in an object URL.

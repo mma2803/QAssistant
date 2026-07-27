@@ -7,7 +7,7 @@ import { LifecycleService } from './lifecycle.service.js';
 import {
   GCS_DELETER,
   LocalGcsDeleter,
-  CloudGcsDeleter,
+  S3GcsDeleter,
   type GcsDeleter,
 } from './gcs-deleter.service.js';
 
@@ -26,7 +26,7 @@ import {
     {
       provide: GCS_DELETER,
       useFactory: (config: AppConfig): GcsDeleter =>
-        config.STORAGE_DRIVER === 'gcs' ? new CloudGcsDeleter(config) : new LocalGcsDeleter(config),
+        config.STORAGE_DRIVER === 's3' ? new S3GcsDeleter(config) : new LocalGcsDeleter(config),
       inject: [APP_CONFIG],
     },
   ],

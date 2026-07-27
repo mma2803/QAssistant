@@ -13,7 +13,7 @@ strictly within that tenant's scope.
 
 | Tool | Purpose |
 |------|---------|
-| `authenticate(email, password, tenantId?)` | Open a session (token held in memory only). Required first. |
+| `authenticate(email, password, tenantSlug?)` | Open a session (token held in memory only). Required first. |
 | `list_records(status?, projectId?, cursor?, limit?)` | List the tenant's recorded sessions. |
 | `get_record(sessionId)` | Full record: artifacts, generated code versions, flags, context. |
 | `list_ready_to_integrate()` | Approved versions whose status is `ready_to_integrate`. |
@@ -30,7 +30,7 @@ for a step-by-step flow:
 
 | Prompt | Purpose |
 |--------|---------|
-| `connect` | Collects email, password, tenantId and signs you in. |
+| `connect` | Collects email, password, tenant slug and signs you in. |
 | `browse` | Presents the action menu (list records · get a record · ready-to-integrate · integrate). |
 
 The server instructions also tell the client to authenticate first, then offer
@@ -44,8 +44,6 @@ the menu — so even without picking a prompt, Claude walks you through it.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `QASSISTANT_API_URL` | `http://localhost:8080` | Base URL of the QAssistant API. The `/api/v1` global prefix is appended automatically when the URL is host-only; pass a URL that already includes a path to override. |
-| `FIREBASE_API_KEY` | `local-api-key` | Identity Platform Web API key. |
-| `FIREBASE_AUTH_EMULATOR_HOST` | _(unset)_ | e.g. `127.0.0.1:9099` to use the local Auth emulator. |
 
 ## Build & run
 
@@ -56,13 +54,11 @@ node apps/mcp/dist/main.js   # speaks JSON-RPC over stdio
 
 ## Connect from Claude Code
 
-Local dev (against the Auth emulator and a local API):
+Local dev (against a local API):
 
 ```bash
 claude mcp add qassistant \
   --env QASSISTANT_API_URL=http://localhost:8080 \
-  --env FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
-  --env FIREBASE_API_KEY=local-api-key \
   -- node /absolute/path/to/QAssistant/apps/mcp/dist/main.js
 ```
 
@@ -75,9 +71,7 @@ Equivalent `.mcp.json` / settings entry:
       "command": "node",
       "args": ["/absolute/path/to/QAssistant/apps/mcp/dist/main.js"],
       "env": {
-        "QASSISTANT_API_URL": "http://localhost:8080",
-        "FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099",
-        "FIREBASE_API_KEY": "local-api-key"
+        "QASSISTANT_API_URL": "http://localhost:8080"
       }
     }
   }
@@ -85,5 +79,5 @@ Equivalent `.mcp.json` / settings entry:
 ```
 
 Then, in Claude Code, ask it to authenticate (it will call `authenticate` with
-your email/password/tenantId), read a record, push the code to your test repo,
+your email/password/tenant slug), read a record, push the code to your test repo,
 and report the result back.

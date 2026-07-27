@@ -1,0 +1,79 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api-image: ${{ steps.images.outputs.api }}
+      web-image: ${{ steps.images.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute lowercase image refs (GHCR requires lowercase)
+        id: images
+        run: |
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "api=ghcr.io/${REPO_LC}/qassistant-api:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/${REPO_LC}/qassistant-web:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push api image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/api.Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.api }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build + push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/web.Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.web }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        env:
+          API_IMAGE: ${{ needs.build-and-push.outputs.api-image }}
+          WEB_IMAGE: ${{ needs.build-and-push.outputs.web-image }}
+          SHA: ${{ github.sha }}
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 600 -D /dev/null "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/deploy_key"
+          # The deploy key's authorized_keys entry is restricted (command=) to
+          # only ever run infra/vps/deploy.sh — the arguments below are what
+          # that forced command receives, no interactive shell is possible.
+          ssh -i "$RUNNER_TEMP/deploy_key" -o StrictHostKeyChecking=accept-new \
+            "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" \
+            "$SHA" "$API_IMAGE" "$WEB_IMAGE"

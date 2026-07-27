@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import type { TokenRole, Role } from '@qassistant/shared/enums';
-import { FirebaseService } from './firebase.service.js';
+import { TokenService } from './token.service.js';
 import { getRequestState } from './request-context.js';
 import {
   IS_PUBLIC,
@@ -19,7 +19,7 @@ import {
 import { MustChangePasswordException } from './errors.js';
 
 /**
- * Verifies the Identity Platform ID token and populates the request-scoped
+ * Verifies the opaque bearer access token and populates the request-scoped
  * RequestContext with the verified identity (contract section 1, steps 1-2).
  * Also enforces:
  *   - the must_change_password gate (blocks everything except the two allowed
@@ -35,7 +35,7 @@ import { MustChangePasswordException } from './errors.js';
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly firebase: FirebaseService,
+    private readonly tokens: TokenService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -56,7 +56,7 @@ export class AuthGuard implements CanActivate {
 
     let decoded;
     try {
-      decoded = await this.firebase.verifyIdToken(token);
+      decoded = await this.tokens.verifyAccessToken(token);
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }

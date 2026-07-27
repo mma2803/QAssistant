@@ -9,7 +9,7 @@ import { passwordSchema } from './auth.js';
  * tenant session var.
  */
 
-/** POST /admin/tenants: create tenant (GCIP tenant + tenants row) + first admin user. */
+/** POST /admin/tenants: create tenant (a `tenants` row with a generated slug) + first admin user. */
 export const createTenantRequestSchema = z.object({
   name: nonEmptyString,
   firstAdmin: z.object({

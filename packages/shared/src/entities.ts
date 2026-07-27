@@ -26,7 +26,7 @@ import {
 export const tenantSchema = z.object({
   id: uuid,
   name: z.string(),
-  gcipTenantId: z.string(),
+  slug: z.string(),
   status: z.enum(TENANT_STATUSES),
   defaultTestFramework: z.string(),
   defaultTestLanguage: z.string(),
@@ -40,7 +40,6 @@ export type Tenant = z.infer<typeof tenantSchema>;
 export const tenantUserSchema = z.object({
   id: uuid,
   tenantId: uuid,
-  gcipUid: z.string(),
   email: z.string().email(),
   role: z.enum(ROLES),
   status: z.enum(USER_STATUSES),
@@ -77,7 +76,7 @@ export const jiraConfigSchema = z.object({
   projectId: uuid,
   baseUrl: z.string().url(),
   projectKey: z.string(),
-  // tokenSecretRef intentionally omitted from API reads; tokens never leave Secret Manager.
+  // tokenSecretRef intentionally omitted from API reads; tokens never leave the encrypted secrets store.
   status: z.enum(JIRA_STATUSES),
   createdAt: isoTimestamp,
   updatedAt: isoTimestamp,

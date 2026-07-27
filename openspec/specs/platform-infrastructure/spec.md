@@ -3,46 +3,52 @@
 ## Purpose
 TBD - created by archiving change qassistant-mvp. Update Purpose after archive.
 ## Requirements
-### Requirement: Terraform-provisioned managed-service stack
-The system SHALL define all cloud infrastructure as Terraform, using GCP managed services (Cloud Run, Cloud SQL PostgreSQL, GCS, Secret Manager, Identity Platform), such that the entire stack can be provisioned from documented operator prerequisites, a valid Google login, and a GCP project ID without undocumented manual console steps. Provisioning SHALL rely on the already-authenticated `gcloud` CLI and SHALL fail fast (abort immediately, no interactive retry loop) if authentication is invalid. The MVP preference is one Cloud Run app service for all application endpoints where practical.
+### Requirement: Docker-Compose-provisioned self-hosted stack
+The system SHALL define all infrastructure as a Docker Compose stack (`infra/docker-compose.prod.yml`) running on a single self-hosted VPS, such that the entire stack can be provisioned from documented operator prerequisites (a blank VPS with SSH access) without a managed cloud provider. A one-time OS-level bootstrap script (`infra/vps/bootstrap.sh`) installs Docker, configures the firewall, and creates a dedicated non-root deploy user; `infra/vps/deploy.sh` (invoked by CI/CD on every push to `main`) syncs the reviewed compose/Caddy config from git, backs up the database, applies migrations, and rolls out new container images.
 
-#### Scenario: Fresh deployment from documented prerequisites
-- **WHEN** an operator runs the Terraform with documented prerequisites satisfied, a valid Google login, and a GCP project ID
-- **THEN** the system provisions the Cloud Run app service topology, Cloud SQL PostgreSQL, GCS buckets, Secret Manager, Identity Platform, and required IAM without undocumented manual cloud-console steps
+#### Scenario: Fresh provisioning from a blank VPS
+- **WHEN** an operator runs `infra/vps/bootstrap.sh` on a blank VPS with documented prerequisites satisfied
+- **THEN** the system installs Docker, configures the firewall to allow only SSH/HTTP/HTTPS, and creates the deploy user and application directory layout, without undocumented manual steps
 
-#### Scenario: Invalid authentication fails fast
-- **WHEN** provisioning runs and the `gcloud` CLI is not validly authenticated
-- **THEN** the system aborts immediately without entering an interactive retry loop
+#### Scenario: Automatic deploy on push to main
+- **WHEN** a reviewed change is merged to `main`
+- **THEN** CI/CD builds and pushes new container images and triggers `infra/vps/deploy.sh` over SSH, which backs up the database, applies migrations, and rolls out the new images
 
-#### Scenario: Repeatable and idempotent apply
-- **WHEN** the operator re-runs Terraform against an already-provisioned project with no config changes
-- **THEN** the system reports no changes and leaves existing resources intact
+#### Scenario: Repeatable and idempotent bootstrap
+- **WHEN** the operator re-runs `infra/vps/bootstrap.sh` against an already-bootstrapped VPS
+- **THEN** the system detects existing installation state and makes no destructive changes
 
-### Requirement: Serverless hosting on Cloud Run
-The system SHALL host the backend API and dashboard web app on Cloud Run or an equivalent managed runtime rather than self-managed compute.
+### Requirement: Containerized hosting behind a reverse proxy
+The system SHALL host the backend API and dashboard web app as containers in a single Docker Compose stack on one VPS, fronted by a Caddy reverse proxy that terminates TLS (automatic HTTPS) and serves the dashboard's static assets, reverse-proxying `/api/v1/*` and `/health` to the API container.
 
-#### Scenario: App endpoints served from Cloud Run
-- **WHEN** a client calls the backend API or loads a dashboard
-- **THEN** the request is served by Cloud Run or an equivalent managed runtime
+#### Scenario: App endpoints served through the reverse proxy
+- **WHEN** a client calls the backend API or loads the dashboard
+- **THEN** the request is served by the Caddy reverse proxy over HTTPS, which routes it to the api or web container as appropriate
+
+#### Scenario: Health-gated rollout
+- **WHEN** a new API container is starting during a deploy
+- **THEN** the reverse proxy's active health check withholds live traffic from that container until it reports healthy
 
 ### Requirement: Artifact and secret storage
-The system SHALL store application metadata in Cloud SQL PostgreSQL, captured artifacts in GCS, and project credentials/secrets in Secret Manager, and SHALL NOT store secrets in PostgreSQL. Platform-level secrets, including the Gemini Developer API key used to call the AI model, SHALL also be stored in Secret Manager and injected into the service at runtime rather than embedded in code, configuration files, or PostgreSQL.
+The system SHALL store application metadata in a self-hosted PostgreSQL instance, captured artifacts in MinIO (S3-compatible object storage), and project credentials/secrets envelope-encrypted (AES-256-GCM) in a dedicated Postgres table, keyed by an encryption key that lives only in the server's persistent `.env` file and is never itself stored in the database. Platform-level secrets, including the Gemini Developer API key used to call the AI model, SHALL also be injected into the service at runtime from that `.env` file rather than embedded in code, configuration files, or committed to git.
+
+This is a deliberate reinterpretation of the prior "SHALL NOT store secrets in Postgres" wording, which was written for a plaintext-exposure threat model: an AES-256-GCM-encrypted value whose key never touches the database is not meaningfully weaker than a separate encrypted file store, and it avoids provisioning and separately backing up a second persistent volume on a single VPS.
 
 #### Scenario: Metadata persisted to PostgreSQL
 - **WHEN** the system creates tenants, projects, users, sessions, artifact metadata, generated test versions, or comments
-- **THEN** it stores the metadata in Cloud SQL PostgreSQL with tenant and project identifiers as applicable
+- **THEN** it stores the metadata in the self-hosted PostgreSQL instance with tenant and project identifiers as applicable
 
-#### Scenario: Artifact persisted to GCS
+#### Scenario: Artifact persisted to MinIO
 - **WHEN** the capture pipeline uploads a DOM-replay payload or screenshot
-- **THEN** the artifact is written to a GCS bucket under a tenant/project/session-namespaced path
+- **THEN** the artifact is written to MinIO under a tenant/project/session-namespaced path via a presigned upload URL
 
-#### Scenario: Project credentials kept out of the database
-- **WHEN** a project's default credentials are saved
-- **THEN** they are stored in Secret Manager and only a reference is kept in PostgreSQL
+#### Scenario: Project credentials encrypted at rest
+- **WHEN** a project's default credentials or a Jira token are saved
+- **THEN** the value is AES-256-GCM-encrypted and stored in the `encrypted_secrets` table, and only an opaque reference is kept on the owning row; the encryption key is never stored in Postgres
 
 #### Scenario: Gemini API key stored as a platform secret
 - **WHEN** the system needs the Gemini Developer API key to call the AI model
-- **THEN** it reads the key from Secret Manager at runtime, and the key is never stored in PostgreSQL or embedded in code or configuration files
+- **THEN** it reads the key from the server's persistent `.env` at runtime, and the key is never stored in PostgreSQL, embedded in code or configuration files, or passed through CI/CD
 
 ### Requirement: Row-level-security tenant isolation
 The system SHALL enforce tenant isolation in PostgreSQL using row-level security as the floor: every tenant-scoped table SHALL have an RLS policy keyed off a per-request session setting (for example `app.tenant_id`) that the backend sets from the verified token's `tenantId` claim at the start of each request or transaction. Application queries SHALL still pass `tenant_id` explicitly, so the explicit predicate and RLS are defense in depth. The `super-admin`, having no tenant, SHALL use a separate privileged path rather than the tenant session setting.
@@ -106,11 +112,4 @@ The system SHALL allow a tenant admin to toggle a project between active and ina
 #### Scenario: Admin reactivates a project
 - **WHEN** a tenant admin reactivates an inactive project
 - **THEN** new sessions can be started for that project again
-
-### Requirement: Keyless service identity via workload identity
-The system SHALL authenticate Cloud Run services to other GCP services using workload identity and SHALL NOT use long-lived service-account key files.
-
-#### Scenario: Service accesses GCS without a key file
-- **WHEN** a Cloud Run service reads or writes GCS or Secret Manager
-- **THEN** it authenticates via workload identity and no service-account key file is deployed
 

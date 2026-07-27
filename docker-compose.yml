@@ -1,5 +1,6 @@
-# Local development emulators (TECHNICAL_CHOICES D28).
-# Postgres + Firebase Auth emulator + fake-gcs-server. No prod credentials here.
+# Local development services (self-hosted VPS migration).
+# Postgres + MinIO. No prod credentials here. Dev and prod now share the exact
+# same auth code path (real Postgres, no emulator distinction needed).
 # Start with: npm run dev:infra  (docker compose up -d)
 services:
   postgres:
@@ -22,40 +23,43 @@ services:
       timeout: 5s
       retries: 10
 
-  # Identity Platform / Firebase Auth emulator. Exposes the auth REST surface
-  # that firebase-admin verifyIdToken / user management hit when
-  # FIREBASE_AUTH_EMULATOR_HOST points here.
-  firebase-auth:
-    image: andreysenov/firebase-tools:latest
-    container_name: qassistant-firebase-auth
-    # --import/--export-on-exit persist the emulator's auth accounts to /data so
-    # admins/qa-engineers survive a container restart (DB already persists via
-    # pgdata; without this the auth side resets and logins break). BUG-008.
-    command: >
-      firebase emulators:start
-      --only auth
-      --project ${FIREBASE_PROJECT_ID:-main-nima}
-      --import=/data
-      --export-on-exit=/data
+  # S3-compatible object storage. The S3Gcs{Signer,Reader,Deleter} drivers
+  # target this when STORAGE_DRIVER=s3 / S3_ENDPOINT points here — the same
+  # path used in prod against a real MinIO deployment.
+  minio:
+    image: minio/minio:latest
+    container_name: qassistant-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-qassistant-dev}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-qassistant-dev-secret}
     ports:
-      - "9099:9099"
-      - "4000:4000"
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - ./infra/local/firebase.json:/home/node/firebase.json:ro
-      - authdata:/data
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # GCS emulator. The Storage client + V4 signer target this when
-  # STORAGE_EMULATOR_HOST points here.
-  fake-gcs:
-    image: fsouza/fake-gcs-server:latest
-    container_name: qassistant-fake-gcs
-    command: ["-scheme", "http", "-port", "4443", "-public-host", "127.0.0.1:4443"]
-    ports:
-      - "4443:4443"
-    volumes:
-      - gcsdata:/storage
+  # One-shot: creates the artifacts bucket, then exits. `docker compose up -d
+  # --wait` does not wait on one-shot containers, but it runs before the api
+  # container's first request in practice since it starts as soon as minio is
+  # healthy.
+  minio-init:
+    image: minio/mc:latest
+    container_name: qassistant-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY_ID:-qassistant-dev} ${S3_SECRET_ACCESS_KEY:-qassistant-dev-secret} &&
+      mc mb --ignore-existing local/${ARTIFACTS_BUCKET:-qassistant-artifacts-local}
+      "
 
 volumes:
   pgdata:
-  gcsdata:
-  authdata:
+  miniodata:

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule } from './config/config.module.js';
 import { DbModule } from './db/db.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -31,7 +32,7 @@ import { TenantSettingsModule } from './tenant-settings/tenant-settings.module.j
  * Feature agents add their modules to the FEATURE_MODULES array below. Each
  * feature module relies on the global ConfigModule / DbModule / AuthModule, so
  * it can inject AppConfig (APP_CONFIG), DbService, RequestContext, and
- * FirebaseService without importing them again.
+ * TokenService/IdentityService without importing them again.
  *
  * Add imports like:
  *   import { AdminModule } from './admin/admin.module.js';
@@ -60,6 +61,15 @@ const FEATURE_MODULES: NonNullable<unknown>[] = [
 ];
 
 @Module({
-  imports: [ConfigModule, DbModule, AuthModule, HealthModule, ...(FEATURE_MODULES as never[])],
+  imports: [
+    ConfigModule,
+    DbModule,
+    AuthModule,
+    // Only applied where a route opts in via @UseGuards(ThrottlerGuard) (the
+    // login endpoint) — no global rate limiting on the rest of the API.
+    ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 1000 }] }),
+    HealthModule,
+    ...(FEATURE_MODULES as never[]),
+  ],
 })
 export class AppModule {}

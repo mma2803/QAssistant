@@ -10,11 +10,11 @@ import type { AuthMeResponse } from '@qassistant/shared';
 import { api, ApiError } from '../lib/api';
 import {
   onAuthChanged,
-  signIn as fbSignIn,
-  signOut as fbSignOut,
-  reauthenticate as fbReauthenticate,
-  getIdToken,
-} from '../lib/firebase';
+  signIn as clientSignIn,
+  signOut as clientSignOut,
+  getAccessToken,
+  tryRestoreSession,
+} from '../lib/auth-client';
 
 export type Role = 'admin' | 'qa-engineer';
 
@@ -29,7 +29,7 @@ interface AuthState {
 
 interface AuthApi extends AuthState {
   role: Role | null;
-  signIn: (email: string, password: string, tenantId?: string) => Promise<void>;
+  signIn: (email: string, password: string, tenantSlug?: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Set a new password and clear the forced-change marker, then re-bootstrap. */
   completePasswordChange: (newPassword: string) => Promise<void>;
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   });
 
   async function bootstrap(): Promise<void> {
-    const token = await getIdToken();
+    const token = await getAccessToken();
     if (!token) {
       setState({ loading: false, me: null, mustChangePassword: false, signedIn: false });
       return;
@@ -75,7 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   }
 
   useEffect(() => {
-    // Re-bootstrap whenever the ID token changes (sign-in, refresh, sign-out).
+    // A refresh cookie may already be present on a fresh page load even
+    // though nothing is held in memory yet; try to restore it once, then
+    // re-bootstrap on every subsequent auth transition (sign-in/out/refresh).
+    void tryRestoreSession().then(() => bootstrap());
     const unsub = onAuthChanged(() => {
       void bootstrap();
     });
@@ -89,27 +92,20 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     return {
       ...state,
       role,
-      signIn: async (email, password, tenantId) => {
-        await fbSignIn(email, password, tenantId);
+      signIn: async (email, password, tenantSlug) => {
+        await clientSignIn(email, password, tenantSlug);
         await bootstrap();
       },
       signOut: async () => {
-        await fbSignOut();
+        await clientSignOut();
         setState({ loading: false, me: null, mustChangePassword: false, signedIn: false });
       },
       completePasswordChange: async (newPassword) => {
-        // The backend sets the new password (Admin SDK) AND clears the marker in
-        // one call, using the still-valid current token. We must NOT call the
-        // client-side updatePassword first: it would bump tokensValidAfterTime
-        // and, since the guard verifies with checkRevoked=true, the token would
-        // be rejected before it could clear the marker.
+        // Unlike an admin-driven reset, completing a self-service password
+        // change does not revoke the current session (see
+        // IdentityService.setTenantUserPassword) — the current access token
+        // keeps working, so no re-sign-in is needed, just re-bootstrap.
         await api.completePasswordChange(newPassword);
-        // The password change bumped tokensValidAfterTime, so every token from
-        // the current session (even refresh-token exchanges, which keep the old
-        // auth_time) now fails checkRevoked. Re-sign-in with the new password to
-        // mint a token with a current auth_time, then re-bootstrap.
-        await fbReauthenticate(newPassword);
-        await getIdToken(true);
         await bootstrap();
       },
       refresh: bootstrap,

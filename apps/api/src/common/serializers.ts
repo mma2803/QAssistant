@@ -53,7 +53,7 @@ export function toTenant(row: TenantRow): Tenant {
   return {
     id: row.id,
     name: row.name,
-    gcipTenantId: row.gcipTenantId,
+    slug: row.slug,
     status: row.status as TenantStatus,
     defaultTestFramework: row.defaultTestFramework,
     defaultTestLanguage: row.defaultTestLanguage,
@@ -67,7 +67,6 @@ export function toTenantUser(row: TenantUserRow): TenantUser {
   return {
     id: row.id,
     tenantId: row.tenantId,
-    gcipUid: row.gcipUid,
     email: row.email,
     role: row.role as Role,
     status: row.status as UserStatus,
@@ -97,7 +96,7 @@ export function toProject(row: ProjectRow): Project {
   };
 }
 
-/** tokenSecretRef is intentionally never serialized (tokens stay in Secret Manager). */
+/** tokenSecretRef is intentionally never serialized (tokens stay in the encrypted secrets store). */
 export function toJiraConfig(row: JiraConfigRow): JiraConfig {
   return {
     id: row.id,

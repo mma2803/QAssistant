@@ -2,7 +2,7 @@
 
 Chrome MV3 extension that records QA sessions as DOM-replay (rrweb) with optional
 viewport screenshots, lets the tester flag important states via a hotkey, and
-uploads artifacts to GCS through backend-minted write-only signed URLs.
+uploads artifacts to object storage through backend-minted write-only signed URLs.
 
 ## Architecture
 
@@ -20,14 +20,15 @@ Three contexts (see `src/shared/messages.ts` for the typed protocol between them
 
 ## Identity (task 3.2)
 
-Sign-in uses the Identity Platform REST API (`signInWithPassword`), not the
-firebase web SDK, because the MV3 service worker has no DOM/window. ID and refresh
-tokens live in `chrome.storage.local` (per-extension isolated). The worker refreshes
-the ID token via the secure-token endpoint when it is near expiry. The stored
-refresh token is the user's identity and is treated as a secret (design D27,
-accepted ~1h revocation gap). The forced password-change flow updates the GCIP
-password, then clears the backend `mustChangePassword` marker; capture is blocked
-server-side until then.
+Sign-in uses the backend's own REST endpoints (`POST /auth/login`), not a
+client SDK, because the MV3 service worker has no DOM/window. Access and
+refresh tokens live in `chrome.storage.local` (per-extension isolated). The
+worker refreshes the access token via `POST /auth/refresh` when it is near
+expiry. The stored refresh token is the user's identity and is treated as a
+secret (design D27). The forced password-change flow calls the backend's
+`/auth/complete-password-change`, which sets the new password hash and clears
+the `mustChangePassword` marker in one call; capture is blocked server-side
+until then.
 
 ## Capture (tasks 3.5, 3.6, 3.7)
 
@@ -54,5 +55,6 @@ npm run build -w @qassistant/extension
 ```
 
 Load `apps/extension/dist` as an unpacked extension. Configure via Vite env:
-`VITE_API_BASE_URL`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_TENANT_ID`, and
-`VITE_FIREBASE_AUTH_EMULATOR_HOST` for local emulator dev.
+`VITE_API_BASE_URL` (the backend origin) and `VITE_DEFAULT_TENANT_SLUG`
+(prefilled at sign-in; leave unset to type it each time, or blank for
+super-admin).

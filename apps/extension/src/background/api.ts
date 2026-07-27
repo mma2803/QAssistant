@@ -12,7 +12,7 @@ import type {
 } from '@qassistant/shared';
 import type { ArtifactType } from '@qassistant/shared/enums';
 import { apiBase } from '../shared/config.js';
-import { getValidIdToken } from './auth.js';
+import { getValidAccessToken } from './auth.js';
 
 /** Error carrying the backend envelope code so callers can branch (e.g. gate). */
 export class ApiError extends Error {
@@ -33,7 +33,7 @@ interface RequestOpts {
 }
 
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
-  const token = await getValidIdToken();
+  const token = await getValidAccessToken();
   if (!token) {
     throw new ApiError('unauthenticated', 'Not signed in', 401);
   }

@@ -2,17 +2,16 @@ import { useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 
 /**
- * Identity Platform email/password sign-in (spec 5.1). The tenant field selects
- * the GCIP tenant; it defaults to the build-time VITE_FIREBASE_TENANT_ID and can
- * be overridden for multi-tenant operators. On success the AuthProvider
- * bootstraps /auth/me and the router routes by role (or to the forced
- * password-change screen if the marker is set).
+ * Self-hosted email/password sign-in (spec 5.1). The tenant field selects
+ * which tenant to sign into by its slug; leaving it blank signs in as the
+ * super-admin. On success the AuthProvider bootstraps /auth/me and the router
+ * routes by role (or to the forced password-change screen if the marker is set).
  */
 export function LoginPage(): JSX.Element {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantId, setTenantId] = useState(import.meta.env.VITE_FIREBASE_TENANT_ID ?? '');
+  const [tenantSlug, setTenantSlug] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +20,7 @@ export function LoginPage(): JSX.Element {
     setError(null);
     setBusy(true);
     try {
-      await signIn(email, password, tenantId || undefined);
+      await signIn(email, password, tenantSlug || undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
     } finally {
@@ -54,12 +53,12 @@ export function LoginPage(): JSX.Element {
           />
         </label>
         <label className="col" style={{ gap: 4 }}>
-          <span className="muted">Tenant ID (optional)</span>
+          <span className="muted">Tenant (leave blank for super-admin)</span>
           <input
             type="text"
-            value={tenantId}
-            placeholder="GCIP tenant id"
-            onChange={(e) => setTenantId(e.target.value)}
+            value={tenantSlug}
+            placeholder="tenant slug"
+            onChange={(e) => setTenantSlug(e.target.value)}
           />
         </label>
         {error && <div className="error">{error}</div>}

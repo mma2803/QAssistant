@@ -10,6 +10,13 @@
 -- are set out of band (or by the local bootstrap); here we only ensure the role
 -- exists with the right RLS posture.
 -- ---------------------------------------------------------------------------
+-- Granting or altering BYPASSRLS always requires the SESSION USER to be
+-- superuser, even to re-assert an attribute a role already has. This
+-- migration runs as app_migrator (not superuser), so it must only touch
+-- BYPASSRLS when the role doesn't already have it — the bootstrap step
+-- (docker-entrypoint-initdb.d/01-roles.sql locally; the same script mounted
+-- into the prod Postgres container) already creates app_superadmin with
+-- BYPASSRLS as the actual superuser, so this is normally a no-op.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
@@ -17,7 +24,7 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_superadmin') THEN
     CREATE ROLE app_superadmin LOGIN BYPASSRLS;
-  ELSE
+  ELSIF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_superadmin' AND rolbypassrls) THEN
     ALTER ROLE app_superadmin BYPASSRLS;
   END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_migrator') THEN
@@ -26,8 +33,16 @@ BEGIN
 END
 $$;
 
--- app_user must never bypass RLS and must not own tables.
-ALTER ROLE app_user NOBYPASSRLS;
+-- app_user must never bypass RLS and must not own tables. Same superuser
+-- restriction as above: only touch the attribute if it isn't already correct
+-- (a freshly-created LOGIN role already defaults to NOBYPASSRLS).
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user' AND rolbypassrls) THEN
+    ALTER ROLE app_user NOBYPASSRLS;
+  END IF;
+END
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Schema / sequence usage grants.

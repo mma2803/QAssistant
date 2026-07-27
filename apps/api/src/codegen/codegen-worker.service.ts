@@ -27,9 +27,10 @@ import { buildPrompt, type LabeledSource } from './prompt-builder.js';
 /**
  * Codegen worker (contract 4.5 POST /internal/tasks/generate). Runs Gemini and
  * writes a generated_tests row. Invoked either by the inline dispatcher (dev,
- * synchronous) or by the OIDC-gated worker endpoint (prod Cloud Tasks).
+ * synchronous) or by the in-process codegen job poller (prod; see
+ * codegen/cloud-tasks.service.ts CodegenPollerService).
  *
- * It runs on the privileged BYPASSRLS pool because a Cloud Tasks call carries no
+ * It runs on the privileged BYPASSRLS pool because a queued job carries no
  * tenant request context; tenant_id / project_id from the validated task payload
  * are written explicitly on every row (defense in depth, design D10). The
  * enqueue path has already authorized the session under RLS, and the payload is
@@ -190,7 +191,7 @@ export class CodegenWorkerService {
       sources.push({
         label: 'project.default_creds',
         kind: 'knowledge',
-        text: 'Default test credentials exist in Secret Manager. Read them from environment variables at runtime; do not hard-code.',
+        text: 'Default test credentials exist in the encrypted secrets store. Read them from environment variables at runtime; do not hard-code.',
         note: 'secret reference only; value withheld',
       });
     }

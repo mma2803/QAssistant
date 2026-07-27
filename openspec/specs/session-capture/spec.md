@@ -40,7 +40,7 @@ The system SHALL require a selected project and work context before any capture 
 
 #### Scenario: Jira token manually replaced
 - **WHEN** a project admin replaces the Jira API token
-- **THEN** the system overwrites the stored Secret Manager value used for future Jira validation
+- **THEN** the system overwrites the stored encrypted-secrets-store value used for future Jira validation
 
 #### Scenario: Jira token uses read-only context permissions
 - **WHEN** a project admin configures a Jira API token

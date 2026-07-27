@@ -1,20 +1,23 @@
 /**
  * chrome.storage.local wrappers. Per design D27 this store holds the user's
- * identity tokens (ID + refresh). chrome.storage.local is per-extension isolated
- * (other extensions cannot read it). The stored refresh token IS the user's
- * identity, so it is treated as a secret: never logged, never sent anywhere but
- * the Identity Platform secure-token endpoint, and cleared on sign-out.
+ * identity tokens (access + refresh). chrome.storage.local is per-extension
+ * isolated (other extensions cannot read it). The stored refresh token IS the
+ * user's identity, so it is treated as a secret: never logged, never sent
+ * anywhere but the backend's /auth/refresh endpoint, and cleared on sign-out.
  */
 
 export interface StoredTokens {
-  idToken: string;
+  accessToken: string;
   refreshToken: string;
-  /** Epoch ms when the ID token expires. */
+  /** Epoch ms when the access token expires. */
   expiresAt: number;
   uid: string;
   email: string | null;
-  /** GCIP tenant id used at sign-in; needed for re-auth and display. */
-  gcipTenantId: string | null;
+  role: 'admin' | 'qa-engineer' | 'super-admin';
+  tenantId: string | null;
+  mustChangePassword: boolean;
+  /** Tenant slug used at sign-in; needed for display and re-auth prefill. */
+  tenantSlug: string | null;
 }
 
 const TOKENS_KEY = 'qa.tokens';

@@ -46,7 +46,7 @@ When screenshots are used as model context and are too large or costly, they are
 
 ## 4. Where bytes live, and the upload credential
 
-DOM-replay payloads and screenshots are uploaded to Google Cloud Storage under a tenant/project/session-namespaced path: `gs://<artifacts-bucket>/<tenantId>/<projectId>/<sessionId>/...`. Metadata (size, checksum, sequence, content type) lives in PostgreSQL; bytes live in GCS.
+DOM-replay payloads and screenshots are uploaded to MinIO (S3-compatible object storage) under a tenant/project/session-namespaced path: `s3://<artifacts-bucket>/<tenantId>/<projectId>/<sessionId>/...`. Metadata (size, checksum, sequence, content type) lives in PostgreSQL; bytes live in object storage.
 
 The browser uploads using a per-object V4 signed URL that is `PUT`-only, short-lived (about 15 minutes), and scoped to that session's object path. The client cannot read, list, or delete in the bucket. The backend mints these URLs only after it has authorized the session, and records artifact metadata itself.
 
@@ -69,24 +69,21 @@ A session can be exported as a ZIP containing a metadata JSON, the DOM-replay st
 
 ## 6. Secret handling
 
-Secrets are never stored in PostgreSQL. The database stores only references:
+Secrets are never stored in plaintext in PostgreSQL. Project-level secrets are envelope-encrypted (AES-256-GCM) and stored as an opaque blob; the encrypting key never itself touches the database:
 
-- Jira read-only tokens: stored in Google Secret Manager; the DB holds only `jira_configs.token_secret_ref`. Rotation overwrites the Secret Manager value; the row is unchanged.
-- Project default credentials: stored in Secret Manager; the DB holds only `projects.default_creds_secret_ref`.
-- The Gemini Developer API key is the single standing secret in the stack. It is stored in Secret Manager and injected at runtime, never committed and never written to the database. QAssistant uses the **paid** Gemini Developer API tier so submitted DOM/screenshot context is not used to improve the provider's products. Note that the Developer API gives weaker regional/data-residency guarantees than Vertex; this is an accepted MVP trade-off given the EU posture.
+- Jira read-only tokens: encrypted and stored in the `encrypted_secrets` table; the DB row holds only `jira_configs.token_secret_ref`. Rotation overwrites the stored value; the row is unchanged.
+- Project default credentials: encrypted the same way; the DB row holds only `projects.default_creds_secret_ref`.
+- The Gemini Developer API key is the single standing plaintext secret in the stack. It lives only in the server's persistent `.env` file (never committed, never passed through CI/CD, never written to the database) and is injected at runtime. QAssistant uses the **paid** Gemini Developer API tier so submitted DOM/screenshot context is not used to improve the provider's products.
 
 Before any captured content is sent to a model, known-secret redaction is applied (passwords, tokens, API keys, auth headers, cookies). This is known-secret redaction, not full PII redaction.
 
-GCP access uses workload identity (no service-account key files). The API key above is a key string, not a service-account key file, so it does not violate the no-key-file rule, but it is a long-lived secret and is guarded accordingly.
+The `SECRETS_ENCRYPTION_KEY` used to encrypt project secrets also lives only in the server's `.env`, with no off-box backup by design (matching the "local backups only" operator decision) — losing that key or the VPS disk permanently loses the ability to decrypt stored secrets. The operator is expected to keep a copy of it (and `DB_PASSWORD`) somewhere safe outside the VPS.
 
-## 7. The ~1 hour revocation gap
+## 7. Token revocation
 
-Authorization is carried in the verified Identity Platform ID token (claims `role`, `tenantId`). Custom claims and role/disable changes are set via the Admin SDK, but they take effect only when the client next refreshes its ID token, which is up to about one hour later. So:
+Authorization is carried in an opaque, database-backed bearer access token (2 hour TTL) plus a rotated refresh token (30 day TTL). Because verifying an access token and enforcing `tenant_users.status = 'active'` both already require a database lookup on every request (see section 8's RLS transaction setup), disabling a user, resetting their password, or changing their role revokes every outstanding token for that user **immediately** — there is no wait for token expiry or a refresh cycle, unlike a self-contained signed token would require.
 
-- Disabling a user, changing their role, or deactivating a tenant is **not** instantaneous. There is a window of up to ~1 hour during which an already-issued ID token still verifies and still grants the old access.
-- This matters most in the Chrome extension, where the auth token (especially the refresh token) is stored in `chrome.storage.local`. That storage is isolated per extension, but the stored token *is* the user's identity: a leaked token allows reading the user's data and tenant-wide session export for up to ~1 hour after a disable. This is **not** a write-only credential (the write-only credential is the separate GCS upload URL).
-
-Mitigations in the MVP: short ID-token TTL, guard the refresh token, and verify claims server-side on every request. Immediate (pre-refresh) revocation is explicitly out of scope for the MVP and the ~1 hour gap is an accepted risk. The backend additionally enforces `tenant_users.status = 'active'` on every request, which closes the gap for the disable case as soon as the disabled status is written, independent of token refresh.
+This matters most in the Chrome extension, where the auth tokens (especially the refresh token) are stored in `chrome.storage.local`. That storage is isolated per extension, but the stored refresh token *is* the user's identity: a leaked token allows reading the user's data and tenant-wide session export until the affected account is disabled, at which point access is cut off immediately. This is **not** a write-only credential (the write-only credential is the separate object-storage upload URL).
 
 ## 8. Tenant isolation (the floor under everything above)
 

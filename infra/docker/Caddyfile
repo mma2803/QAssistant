@@ -1,0 +1,31 @@
+# Reverse proxy + TLS termination + dashboard static file serving
+# (self-hosted VPS migration). SITE_ADDRESS is injected from the server's
+# persistent .env (e.g. "135-181-104-90.sslip.io") — a bare hostname (no
+# scheme) gets automatic HTTPS via Let's Encrypt. Defaulting to
+# "http://localhost" keeps `docker compose up` usable without a real
+# hostname (e.g. a quick local smoke test of the prod images).
+{$SITE_ADDRESS:http://localhost} {
+	encode gzip
+
+	@backend path /api/v1* /health
+	handle @backend {
+		# Active health checks: a container that's "up" but still connecting
+		# its DB pool does not receive live traffic during a deploy swap.
+		reverse_proxy api:8080 {
+			health_uri /health
+			health_interval 10s
+			health_timeout 3s
+		}
+	}
+
+	handle {
+		root * /srv/dashboard
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

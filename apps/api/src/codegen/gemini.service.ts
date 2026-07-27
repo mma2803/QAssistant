@@ -49,6 +49,23 @@ export interface GeminiClient {
 
 export const GEMINI_CLIENT = Symbol('GEMINI_CLIENT');
 
+/** Reject if `promise` has not settled within `ms`. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Gemini call timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /** Strip a leading/trailing markdown code fence the model may wrap code in. */
 export function stripCodeFence(text: string): string {
   const trimmed = text.trim();
@@ -82,14 +99,21 @@ export class GenAiGeminiClient implements GeminiClient {
   async generate(opts: GenerateOptions): Promise<GenerateResult> {
     const modelId = this.modelIdForTier(opts.tier);
     const client = await this.getClient();
-    const response = await client.models.generateContent({
-      model: modelId,
-      contents: [{ role: 'user', parts: [{ text: opts.prompt.user }] }],
-      config: {
-        systemInstruction: opts.prompt.system,
-        temperature: opts.tier === 'pro' ? 0.2 : 0.4,
-      },
-    });
+    // Hard timeout: the codegen poller runs jobs on a shared event loop with no
+    // per-job process isolation, so a stuck model call must not be able to pin
+    // the poller (or a request handler, for the synchronous 'inline' driver)
+    // indefinitely on a memory-constrained single VPS.
+    const response = await withTimeout<any>(
+      client.models.generateContent({
+        model: modelId,
+        contents: [{ role: 'user', parts: [{ text: opts.prompt.user }] }],
+        config: {
+          systemInstruction: opts.prompt.system,
+          temperature: opts.tier === 'pro' ? 0.2 : 0.4,
+        },
+      }),
+      this.config.GEMINI_TIMEOUT_MS,
+    );
     const text: string =
       typeof response?.text === 'string'
         ? response.text

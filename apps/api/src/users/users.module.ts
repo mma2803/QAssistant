@@ -4,8 +4,8 @@ import { UsersService } from './users.service.js';
 
 /**
  * Tenant user-management module (contract section 4.2). Admin-only routes that
- * run on the tenant-scoped RLS path and call the Admin SDK to keep GCIP and the
- * tenant_users mirror in sync. Relies on global Db/Auth modules.
+ * run on the tenant-scoped RLS path and call IdentityService to manage
+ * tenant_users rows directly. Relies on global Db/Auth modules.
  */
 @Module({
   controllers: [UsersController],

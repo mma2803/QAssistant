@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_CONFIG } from '../config/config.module.js';
 import type { AppConfig } from '../config/config.service.js';
+import { DbService } from '../db/db.service.js';
 import { CodegenController } from './codegen.controller.js';
 import { CodegenService } from './codegen.service.js';
 import { CodegenWorkerService } from './codegen-worker.service.js';
@@ -14,7 +15,8 @@ import {
   CLOUD_TASKS_DISPATCHER,
   INLINE_TASK_RUNNER,
   InlineCloudTasksDispatcher,
-  GoogleCloudTasksDispatcher,
+  PostgresCloudTasksDispatcher,
+  CodegenPollerService,
   type CloudTasksDispatcher,
   type InlineTaskRunner,
 } from './cloud-tasks.service.js';
@@ -28,18 +30,20 @@ import {
  *   - GEMINI_CLIENT: the live @google/genai client when GEMINI_API_KEY is set,
  *     else the deterministic FakeGeminiClient so codegen runs with no network.
  *   - CLOUD_TASKS_DISPATCHER: the inline dispatcher (runs the worker in-process)
- *     when CLOUD_TASKS_DRIVER='inline' (default), else the real Cloud Tasks
- *     dispatcher targeting the OIDC-gated worker endpoint.
+ *     when CLOUD_TASKS_DRIVER='inline' (tests/dev), else the Postgres-backed
+ *     dispatcher + CodegenPollerService (self-hosted VPS migration; replaces
+ *     Cloud Tasks). The poller no-ops unless CLOUD_TASKS_DRIVER='postgres'.
  *
- * The inline dispatcher needs the worker's runTask as its runner; we expose it
- * behind INLINE_TASK_RUNNER (a factory that closes over CodegenWorkerService) so
- * there is no circular constructor dependency.
+ * The inline dispatcher (and the poller) need the worker's runTask as their
+ * runner; we expose it behind INLINE_TASK_RUNNER (a factory that closes over
+ * CodegenWorkerService) so there is no circular constructor dependency.
  */
 @Module({
   controllers: [CodegenController],
   providers: [
     CodegenService,
     CodegenWorkerService,
+    CodegenPollerService,
     {
       provide: GEMINI_CLIENT,
       useFactory: (config: AppConfig): GeminiClient =>
@@ -54,11 +58,11 @@ import {
     },
     {
       provide: CLOUD_TASKS_DISPATCHER,
-      useFactory: (config: AppConfig, runner: InlineTaskRunner): CloudTasksDispatcher =>
-        config.CLOUD_TASKS_DRIVER === 'cloud-tasks'
-          ? new GoogleCloudTasksDispatcher(config)
+      useFactory: (config: AppConfig, runner: InlineTaskRunner, dbService: DbService): CloudTasksDispatcher =>
+        config.CLOUD_TASKS_DRIVER === 'postgres'
+          ? new PostgresCloudTasksDispatcher(dbService)
           : new InlineCloudTasksDispatcher(runner),
-      inject: [APP_CONFIG, INLINE_TASK_RUNNER],
+      inject: [APP_CONFIG, INLINE_TASK_RUNNER, DbService],
     },
   ],
   exports: [CodegenService, CodegenWorkerService],

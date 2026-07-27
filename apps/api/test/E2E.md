@@ -10,13 +10,15 @@ real PostgreSQL schema and the canonical row-level-security policies.
   `AdminService`, `UsersService`, `AuthRoutesService.completePasswordChange`,
   `ProjectsService`, `CaptureService`, `CodegenService` + the codegen worker, and
   `DashboardService`, each inside a real `DbService.withTenant` / `withSuperadmin`
-  transaction. Only the external boundaries are faked (Identity Platform via an
-  in-memory `FakeFirebase`, GCS via an in-memory reader, Gemini via the
-  production offline `FakeGeminiClient`). The flow: provision a tenant + first
-  admin; add a qa-engineer with the forced `must_change_password` marker; clear
-  the marker via the real forced-password-change service and assert it is cleared
-  on **both the GCIP claim and the DB mirror**; create a project; start a project-
-  and work-context-gated session (and confirm the service gate rejects a session
+  transaction. Auth (password hashing, token issuance) is self-hosted and backed
+  by the same Postgres these tests already use, so the real
+  `PasswordService`/`TokenService`/`IdentityService` are wired in directly — only
+  GCS-equivalent reads (an in-memory reader) and Gemini (the production offline
+  `FakeGeminiClient`) are faked. The flow: provision a tenant + first admin; add
+  a qa-engineer with the forced `must_change_password` marker; clear the marker
+  via the real forced-password-change service and assert it is cleared **and**
+  the new password hash verifies; create a project; start a project- and
+  work-context-gated session (and confirm the service gate rejects a session
   with no work context); register DOM-replay + screenshot artifacts (and confirm a
   gcsPath outside the session prefix is rejected); stop the session; generate and
   approve an asserted Playwright test (Pro tier); then read it back through the
@@ -39,9 +41,9 @@ Bring up the local emulators (or any reachable Postgres) and run the workspace
 test script:
 
 ```bash
-npm run dev:infra            # docker-compose: postgres + firebase-auth + fake-gcs
+npm run dev:infra            # docker-compose: postgres + minio
 npm run db:migrate           # optional; the tests also self-apply migrations
-npm test -w @qassistant/api  # runs e2e-flow + rls-isolation
+npm test -w @qassistant/api  # runs e2e-flow + rls-isolation + http-e2e
 ```
 
 Connection defaults match `.env.example` / docker-compose
@@ -63,34 +65,26 @@ the same migrations that ship to production. The e2e flow runs the real services
 through that exact path, so the service logic and every data invariant it relies
 on are verified end to end.
 
-## HTTP + Firebase Auth emulator variant (transport layer)
+## HTTP transport variant (`test/http-e2e.test.ts`)
 
-The service-layer e2e covers everything downstream of identity, faking only the
-true external boundaries. The one thing it cannot exercise offline is the live
-network edges: real Identity Platform ID-token sign-in/verification, the
-`must_change_password` HTTP gate as applied by the auth guard, and a real
-signed-URL PUT to fake-gcs. Those need the Firebase Auth emulator and a running
-Nest server. To run the same flow over HTTP against the emulators:
+The service-layer e2e covers everything downstream of identity, but it never
+starts a real Nest server or goes over HTTP. `http-e2e.test.ts` closes that
+gap: it starts the real Nest app on an ephemeral port, seeds a super-admin
+directly via `IdentityService` (mirroring `src/scripts/seed-super-admin.ts`),
+and drives the entire REST surface (contract section 4) through real HTTP
+calls and real `/auth/login`-minted access tokens — no emulator of any kind is
+needed, since auth is self-hosted. It exercises, in order: `POST
+/api/v1/admin/tenants` -> tenant + first admin; admin sign-in and `POST
+/api/v1/users` to add a qa-engineer; qa-engineer sign-in returning
+`mustChangePassword`, cleared via `POST /api/v1/auth/complete-password-change`;
+`POST /api/v1/projects`; `POST /api/v1/sessions` (work-context gate); `GET
+/api/v1/sessions/{id}/upload-urls` and a real presigned PUT to MinIO; `POST
+/api/v1/sessions/{id}/artifacts`; `POST /api/v1/sessions/{id}/stop`; `POST
+/api/v1/sessions/{id}/generate`; `POST /api/v1/generations/{id}/approve`; and
+`GET /api/v1/dashboard/sessions` as both admin and qa-engineer. It also
+verifies every declared controller route was exercised by at least one test.
 
-1. `npm run dev:infra` (starts the Firebase Auth emulator on `:9099` and
-   fake-gcs on `:4443`), then `npm run db:migrate`.
-2. `npm run seed:super-admin -w @qassistant/api` to create the first super-admin
-   in the emulator.
-3. Start the API: `npm run start:dev -w @qassistant/api` (env from `.env`:
-   `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099`, `STORAGE_DRIVER=local`,
-   `SECRETS_DRIVER=local`, `JIRA_DRIVER=local`).
-4. Exercise the REST surface (contract section 4) in order:
-   - `POST /api/v1/admin/tenants` (super-admin token) -> tenant + first admin.
-   - sign in as the admin against the emulator, then `POST /api/v1/users` to add
-     a qa-engineer.
-   - sign in as the qa-engineer; the first call returns `must_change_password`;
-     `POST /api/v1/auth/complete-password-change` clears it.
-   - `POST /api/v1/projects`, then `POST /api/v1/sessions` (work-context gate),
-     `GET /api/v1/sessions/{id}/upload-urls`, PUT the bytes to the signed URL,
-     `POST /api/v1/sessions/{id}/artifacts`, `POST /api/v1/sessions/{id}/stop`.
-   - `POST /api/v1/sessions/{id}/generate`, `POST /api/v1/generations/{id}/approve`.
-   - `GET /api/v1/dashboard/sessions` as admin and as the qa-engineer.
-
-The emulator-backed network sign-in / token verification and the real signed-URL
-PUT are the only parts not automated here; all of the service logic downstream of
-identity is covered by the service-layer e2e test.
+This test needs a real MinIO reachable at `127.0.0.1:9000` (`npm run
+dev:infra`) in addition to Postgres; it is part of the same `npm test`
+run as the other suites and skips cleanly (or fails, under
+`REQUIRE_E2E_INFRA=true`) if either is unreachable.

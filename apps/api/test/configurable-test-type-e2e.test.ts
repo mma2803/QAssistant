@@ -35,14 +35,14 @@ function jiraValidationFor(ctx: RequestContext, harness: Harness): JiraValidatio
 }
 
 async function provisionTenant(prefix: string): Promise<TenantIdentity> {
-  const adminSvc = new AdminService(h!.db, h!.firebaseAs());
+  const adminSvc = new AdminService(h!.db, h!.identity);
   const result = await adminSvc.createTenant({
     name: `${prefix} ${newId()}`,
     firstAdmin: { email: `admin-${newId()}@${prefix}.test`, password: 'initial-pw-1' },
   });
   tenantIds.push(result.tenant.id);
   return {
-    uid: result.firstAdmin.gcipUid,
+    uid: result.firstAdmin.id,
     role: 'admin',
     tenantId: result.tenant.id,
     actingUserId: result.firstAdmin.id,

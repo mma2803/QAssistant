@@ -1,0 +1,138 @@
+# Production stack for the self-hosted VPS. Config lives here in git (synced
+# to the server on every deploy by infra/vps/deploy.sh); only .env stays
+# server-only (never committed, never passed through CI).
+#
+# Usage on the server:
+#   docker compose -f infra/docker-compose.prod.yml --env-file .env pull
+#   docker compose -f infra/docker-compose.prod.yml --env-file .env up -d --wait
+#
+# API_IMAGE / WEB_IMAGE are set by infra/vps/deploy.sh to a specific git-SHA
+# tag pulled from GHCR — never `:latest` in an actual deploy, so a rollback is
+# just "redeploy the previous SHA".
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: qassistant-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_BOOTSTRAP_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_BOOTSTRAP_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-qassistant}
+    # Tuned for a ~3.5GB VPS shared with minio/api/caddy — the stock image
+    # does not auto-tune for container memory limits (defaults assume a
+    # dedicated large host). max_connections lowered from the 100 default:
+    # both pools' max sizes are fully known (DB_POOL_MAX + a quarter of it),
+    # so 100 unused backend slots is pure wasted memory, not free headroom.
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c max_connections=30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/local/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_BOOTSTRAP_USER:-postgres} -d ${DB_NAME:-qassistant}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  minio:
+    image: minio/minio:latest
+    container_name: qassistant-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 384m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: qassistant-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY_ID} ${S3_SECRET_ACCESS_KEY} &&
+      mc mb --ignore-existing local/${ARTIFACTS_BUCKET:-qassistant-artifacts}
+      "
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "1" }
+
+  api:
+    image: ${API_IMAGE:-qassistant-api:latest}
+    container_name: qassistant-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      S3_ENDPOINT: http://minio:9000
+      # Sized to mem_limit below rather than relying on V8 auto-detecting host
+      # memory (it would otherwise see the whole VPS, not this container's
+      # slice of it).
+      NODE_OPTIONS: --max-old-space-size=640
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    mem_limit: 768m
+    # Give an in-flight codegen job (the poller shares this process) a real
+    # chance to finish before a deploy kills the container outright.
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  web:
+    image: ${WEB_IMAGE:-qassistant-web:latest}
+    container_name: qassistant-web
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      # Caddy's automatic-HTTPS state MUST persist, or every container
+      # recreation re-issues a cert and eventually hits Let's Encrypt's
+      # 50-certs/domain/week rate limit.
+      - caddydata:/data
+      - caddyconfig:/config
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  pgdata:
+  miniodata:
+  caddydata:
+  caddyconfig:

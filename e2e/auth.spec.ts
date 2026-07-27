@@ -9,7 +9,7 @@ test('signs in and signs out through the dashboard shell', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await page.getByLabel('Email').fill('admin@example.test');
   await page.getByLabel('Password').fill('temporary-password');
-  await page.getByLabel('Tenant ID (optional)').fill('tenant-acme');
+  await page.getByLabel('Tenant (leave blank for super-admin)').fill('tenant-acme');
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();

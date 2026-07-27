@@ -185,7 +185,7 @@ export class ProjectsService {
 
   /**
    * PUT /projects/{id}/jira: create or replace the project's Jira config. The
-   * token goes to Secret Manager (overwrite on replace = rotation, contract
+   * token goes to the encrypted secrets store (overwrite on replace = rotation, contract
    * 3.4); the row stores only the ref. At most one config per project.
    */
   async setJiraConfig(projectId: string, input: SetJiraConfigRequest): Promise<JiraConfig> {

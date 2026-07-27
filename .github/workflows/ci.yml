@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  lint-typecheck-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: 127.0.0.1
+      DB_NAME: qassistant
+      DB_USER: app_user
+      DB_PASSWORD: app_user_pw
+      DB_SUPERADMIN_USER: app_superadmin
+      DB_SUPERADMIN_PASSWORD: app_superadmin_pw
+      DB_MIGRATOR_USER: app_migrator
+      DB_MIGRATOR_PASSWORD: app_migrator_pw
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_ACCESS_KEY_ID: qassistant-dev
+      S3_SECRET_ACCESS_KEY: qassistant-dev-secret
+      SECRETS_DRIVER: local
+      SUPER_ADMIN_EMAIL: ops@example.com
+      SUPER_ADMIN_PASSWORD: change-me-now
+      CLOUD_TASKS_DRIVER: inline
+      REQUIRE_E2E_INFRA: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Bring up postgres + minio
+        run: npm run test:e2e:infra
+      - run: npm run db:migrate
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:browser
+      - run: npm run test:e2e:api
+      - run: npm run e2e:coverage
+      - name: Tear down
+        if: always()
+        run: npm run dev:infra:down

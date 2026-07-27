@@ -1,10 +1,11 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_CONFIG } from '../config/config.module.js';
 import type { AppConfig } from '../config/config.service.js';
+import { DbService } from '../db/db.service.js';
 import {
   SECRET_MANAGER,
   LocalSecretManager,
-  GcpSecretManager,
+  PostgresSecretManager,
   type SecretManager,
 } from './secret-manager.service.js';
 
@@ -18,11 +19,11 @@ import {
   providers: [
     {
       provide: SECRET_MANAGER,
-      useFactory: (config: AppConfig): SecretManager =>
-        config.SECRETS_DRIVER === 'gcp'
-          ? new GcpSecretManager(config)
+      useFactory: (config: AppConfig, db: DbService): SecretManager =>
+        config.SECRETS_DRIVER === 'postgres'
+          ? new PostgresSecretManager(config, db)
           : new LocalSecretManager(config),
-      inject: [APP_CONFIG],
+      inject: [APP_CONFIG, DbService],
     },
   ],
   exports: [SECRET_MANAGER],

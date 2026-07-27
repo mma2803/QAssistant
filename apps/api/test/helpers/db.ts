@@ -215,24 +215,31 @@ export async function withNoTenantConnection<T>(
   }
 }
 
+// Placeholder argon2id hash of a fixed test password ("test-password-not-real").
+// Good enough for RLS/isolation tests that never exercise login; tests that
+// need a real working password provision users through the HTTP API instead
+// (see e2e-flow.test.ts / http-e2e.test.ts), which calls PasswordService.
+const PLACEHOLDER_PASSWORD_HASH =
+  '$argon2id$v=19$m=19456,t=2,p=1$dGVzdC1zYWx0LXRlc3Q$MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA';
+
 /** Provision a tenant + admin user via the BYPASSRLS superadmin pool (provisioning path). */
 export async function provisionTenant(
   pools: Pools,
-  opts: { tenantName: string; gcipTenantId: string; adminEmail: string; adminUid: string },
+  opts: { tenantName: string; slug: string; adminEmail: string },
 ): Promise<{ tenantId: string; adminUserId: string }> {
   const client = await pools.superadmin.connect();
   try {
     await client.query('BEGIN');
     const tenantId = newId();
     await client.query(
-      'INSERT INTO tenants (id, name, gcip_tenant_id, status) VALUES ($1,$2,$3,$4)',
-      [tenantId, opts.tenantName, opts.gcipTenantId, 'active'],
+      'INSERT INTO tenants (id, name, slug, status) VALUES ($1,$2,$3,$4)',
+      [tenantId, opts.tenantName, opts.slug, 'active'],
     );
     const adminUserId = newId();
     await client.query(
-      `INSERT INTO tenant_users (id, tenant_id, gcip_uid, email, role, status, must_change_password)
+      `INSERT INTO tenant_users (id, tenant_id, email, password_hash, role, status, must_change_password)
        VALUES ($1,$2,$3,$4,'admin','active',true)`,
-      [adminUserId, tenantId, opts.adminUid, opts.adminEmail],
+      [adminUserId, tenantId, opts.adminEmail, PLACEHOLDER_PASSWORD_HASH],
     );
     await client.query('COMMIT');
     return { tenantId, adminUserId };

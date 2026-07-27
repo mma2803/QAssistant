@@ -4,7 +4,7 @@ import { AdminService } from './admin.service.js';
 
 /**
  * Super-admin provisioning module (contract section 4.1). Relies on the global
- * DbModule (withSuperadmin / BYPASSRLS path) and AuthModule (FirebaseService,
+ * DbModule (withSuperadmin / BYPASSRLS path) and AuthModule (IdentityService,
  * super-admin guard). No tenant scoping here by design (D24).
  */
 @Module({

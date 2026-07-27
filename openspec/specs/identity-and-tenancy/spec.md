@@ -4,11 +4,11 @@
 TBD - created by archiving change qassistant-mvp. Update Purpose after archive.
 ## Requirements
 ### Requirement: Multi-tenant identity model
-The system SHALL model each client/account as an isolated tenant in Identity Platform, mapping one GCIP tenant to one app tenant, where each user belongs to exactly one tenant and data is isolated per tenant.
+The system SHALL model each client/account as an isolated tenant in its own PostgreSQL `tenants` row, where each user belongs to exactly one tenant (via `tenant_users.tenant_id`) and data is isolated per tenant by row-level security. Each tenant has a unique, human-readable `slug` used to select it at login.
 
 #### Scenario: User scoped to a tenant
 - **WHEN** a tenant user authenticates
-- **THEN** the issued ID token carries the user's `uid`, `role`, and the `tenantId` of the tenant they belong to
+- **THEN** the issued access token resolves to the user's `uid`, `role`, and the `tenantId` of the tenant they belong to
 
 #### Scenario: Cross-tenant access denied
 - **WHEN** a request bears a token for tenant A and targets data belonging to tenant B
@@ -34,11 +34,11 @@ The system SHALL support three provisioning levels: a platform-level `super-admi
 
 #### Scenario: Super-admin bootstraps a client
 - **WHEN** the super-admin onboards a new client
-- **THEN** the system creates a tenant and a first admin user for that tenant
+- **THEN** the system creates a tenant (with a generated unique slug) and a first admin user for that tenant
 
 #### Scenario: Admin adds a user by any email
 - **WHEN** a tenant admin adds a user by email (including a Gmail or mixed-domain address) with a role from the dashboard
-- **THEN** the system creates the user inside that tenant's GCIP tenant and sets the role claim
+- **THEN** the system creates the user inside that tenant with a hashed initial password and the given role
 
 #### Scenario: Admin can assign admin role
 - **WHEN** a tenant admin creates a new user
@@ -53,30 +53,34 @@ The system SHALL support three provisioning levels: a platform-level `super-admi
 - **THEN** the system finds no account for that email and sign-in fails
 
 ### Requirement: Email and password authentication
-The system SHALL authenticate users through Identity Platform's email and password provider. Tenant users sign in within their GCIP tenant; the `super-admin` is a project-level user that belongs to no tenant. Email addresses are not verified, since accounts are admin-created and therefore trusted, and there SHALL be no email sending in MVP.
+The system SHALL authenticate users through its own self-hosted email/password check: a tenant user signs in with `{ tenantSlug, email, password }` against the `tenant_users` row scoped to that tenant (verified with argon2id); the `super-admin` is a project-level user (a `super_admins` row) that belongs to no tenant and signs in by omitting `tenantSlug`. Email addresses are not verified, since accounts are admin-created and therefore trusted, and there SHALL be no email sending in MVP. Login failure responses SHALL be uniform and constant-time across all failure stages (unknown tenant slug, unknown email, wrong password) to avoid a tenant/email enumeration side channel.
 
 #### Scenario: Tenant user signs in with email and password
-- **WHEN** a provisioned tenant user submits their email and password for their tenant
-- **THEN** the system authenticates them against their GCIP tenant and issues an ID token
+- **WHEN** a provisioned tenant user submits their tenant slug, email, and password
+- **THEN** the system verifies the password against that tenant's user row and issues an access/refresh token pair
 
 #### Scenario: Super-admin signs in at project level
-- **WHEN** the super-admin submits their email and password
+- **WHEN** the super-admin submits their email and password with no tenant slug
 - **THEN** the system authenticates them as a project-level user that carries no `tenantId`
 
-### Requirement: In-dashboard user management via Admin SDK
-The system SHALL manage users from the dashboard, not a separate console, by calling the Identity Platform Admin SDK from the backend to create users, set an initial password, assign roles, disable users, and reset passwords. Initial passwords are handed over out of band by the creating admin, and a forgotten password SHALL be reset by an admin rather than by self-service.
+#### Scenario: Login failure responses do not leak which stage failed
+- **WHEN** a login request fails because the tenant slug does not exist, the email does not exist within that tenant, or the password is wrong
+- **THEN** the system returns the same generic error with comparable response timing in every case
+
+### Requirement: In-dashboard user management
+The system SHALL manage users from the dashboard, not a separate console, by calling the backend's `IdentityService` (the self-hosted replacement for the prior Admin SDK wrapper) to create users, set an initial password, assign roles, disable users, and reset passwords. Initial passwords are handed over out of band by the creating admin, and a forgotten password SHALL be reset by an admin rather than by self-service. Disabling a user or resetting their password SHALL immediately revoke every outstanding token for that user.
 
 #### Scenario: Admin sets an initial password
 - **WHEN** an admin creates a user
-- **THEN** the backend uses the Admin SDK to create the account and set an initial password that the admin hands over out of band
+- **THEN** the backend hashes and stores an initial password that the admin hands over out of band
 
 #### Scenario: Admin resets a forgotten password
 - **WHEN** a user forgets their password
-- **THEN** an admin resets it through the dashboard rather than the user using self-service recovery
+- **THEN** an admin resets it through the dashboard rather than the user using self-service recovery, and every outstanding token for that user is immediately revoked
 
 #### Scenario: Admin disables a user
 - **WHEN** an admin disables a user
-- **THEN** the backend uses the Admin SDK to disable the account
+- **THEN** the backend marks the account disabled and immediately revokes every outstanding token for that user
 
 #### Scenario: Admin manages another admin
 - **WHEN** a tenant admin disables or resets the password of another admin in the same tenant
@@ -87,41 +91,41 @@ The system SHALL manage users from the dashboard, not a separate console, by cal
 - **THEN** all sessions, artifacts, and generated tests owned by that user remain intact and visible to tenant admins; only the user's ability to sign in is revoked
 
 ### Requirement: Forced password change on first login and after reset
-Because the admin who creates or resets a password knows that password, the system SHALL require the user to change it before any app access. Creating or resetting a password SHALL set a `mustChangePassword` marker (custom claim or metadata); login SHALL route the user to a forced set-new-password step before granting app access; completing it SHALL clear the marker.
+Because the admin who creates or resets a password knows that password, the system SHALL require the user to change it before any app access. Creating or resetting a password SHALL set a `must_change_password` database column; login SHALL route the user to a forced set-new-password step before granting app access; completing it SHALL clear the marker without revoking the current session (the user continues in the same session that just cleared it).
 
 #### Scenario: First login forces password change
 - **WHEN** a user signs in with an admin-set initial password
-- **THEN** the system routes them to a forced set-new-password step, grants no app access until they set a new password, and then clears the `mustChangePassword` marker
+- **THEN** the system routes them to a forced set-new-password step, grants no app access until they set a new password, and then clears the `must_change_password` marker
 
 #### Scenario: Forced change after admin reset
 - **WHEN** an admin resets a user's password and the user next signs in
 - **THEN** the system again requires a forced password change before app access
 
-### Requirement: Custom-claim authorization enforced server-side
-The system SHALL carry authorization in custom claims baked into the verified ID token: tenant users carry `{ role, tenantId }` where `role` is `admin` or `qa-engineer`, and the `super-admin` carries `{ role: "super-admin" }` with no `tenantId`. The backend SHALL verify the token and enforce tenant and role before any data access; the client SHALL NOT assert identity. Role and access changes SHALL take effect on the next token refresh; immediate revocation is out of scope for MVP.
+### Requirement: Token-based authorization enforced server-side
+The system SHALL carry authorization in an opaque, DB-backed bearer access token: verifying it resolves `{ role, tenantId }` for a tenant user (`role` is `admin` or `qa-engineer`) or `{ role: "super-admin" }` with no `tenantId` for the super-admin. The backend SHALL verify the token and enforce tenant and role before any data access; the client SHALL NOT assert identity. Access tokens are valid for 2 hours; refresh tokens for 30 days and are rotated on use. Disabling a user or resetting their password revokes every outstanding token immediately — there is no revocation-gap wait for token expiry.
 
-#### Scenario: Role claim set at creation
-- **WHEN** a user is created with the admin role
-- **THEN** the user's token includes a `role` claim of `admin` and the `tenantId` of their tenant
+#### Scenario: Role resolved at token verification
+- **WHEN** a user created with the admin role presents their access token
+- **THEN** verification resolves a `role` of `admin` and the `tenantId` of their tenant
 
 #### Scenario: Backend enforces claims on every request
 - **WHEN** any request reaches the backend
-- **THEN** the backend verifies the ID token and enforces the `role` and `tenantId` claims before any data access
+- **THEN** the backend verifies the access token and enforces the resolved `role` and `tenantId` before any data access
 
 #### Scenario: Super-admin carries no tenant
 - **WHEN** the super-admin's token is verified
-- **THEN** it carries `role: "super-admin"` and no `tenantId`, and the super-admin uses a separate privileged path rather than a tenant binding
+- **THEN** it resolves `role: "super-admin"` and no `tenantId`, and the super-admin uses a separate privileged path rather than a tenant binding
 
-#### Scenario: Revocation takes effect on token refresh
-- **WHEN** an admin changes a user's role or disables access
-- **THEN** the change takes effect on the next token refresh (up to about one hour), with no immediate revocation in MVP
+#### Scenario: Revocation is immediate
+- **WHEN** an admin changes a user's role, disables access, or resets a password
+- **THEN** every outstanding token for that user is revoked immediately, not on a delayed token-refresh cycle
 
 ### Requirement: First super-admin bootstrap
-The system SHALL bootstrap the first `super-admin` via a seed script or Terraform, not through any UI.
+The system SHALL bootstrap the first `super-admin` via a seed script, not through any UI. The seed script is idempotent on email: re-running it resets the password on an existing super-admin row.
 
 #### Scenario: Seed creates the first super-admin
 - **WHEN** the platform is first provisioned
-- **THEN** a seed script or Terraform creates the first super-admin, and no UI path creates it
+- **THEN** a seed script creates the first super-admin as a `super_admins` row, and no UI path creates it
 
 ### Requirement: Single-tenant resolution without domain assumptions
 The system SHALL resolve a user's tenant from the user's single tenant binding established at invitation, not from the email domain. Each user belongs to exactly one tenant and can access only the data of that tenant. After sign-in, the system SHALL require the user to select a project before capture starts.

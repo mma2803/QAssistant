@@ -1,31 +1,110 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import type { AuthMeResponse, CompletePasswordChangeRequest } from '@qassistant/shared';
-import type { Role } from '@qassistant/shared/enums';
+import type {
+  AuthMeResponse,
+  CompletePasswordChangeRequest,
+  LoginRequest,
+  TokenPairResponse,
+} from '@qassistant/shared';
 import { RequestContext } from '../auth/request-context.js';
-import { FirebaseService } from '../auth/firebase.service.js';
-import { projects, tenants, tenantUsers } from '../db/schema.js';
+import { IdentityService } from '../auth/identity.service.js';
+import { PasswordService } from '../auth/password.service.js';
+import { TokenService, type IssuedTokenPair } from '../auth/token.service.js';
+import { DbService } from '../db/db.service.js';
+import { projects, tenants, tenantUsers, superAdmins } from '../db/schema.js';
 import { AppException } from '../auth/errors.js';
 import { toProject, toTenant } from '../common/serializers.js';
 
 /**
- * Self-service auth routes (contract section 4.2):
+ * Self-hosted auth routes (contract section 4.2, extended by the self-hosted
+ * auth migration):
+ *  - POST /auth/login: password login, tenant-scoped (tenantSlug) or
+ *    super-admin (no tenantSlug). Issues an access+refresh pair.
+ *  - POST /auth/refresh: redeem a refresh token for a new pair (rotated).
+ *  - POST /auth/logout: revoke a refresh token.
  *  - POST /auth/complete-password-change: the ONLY mutating call allowed while
- *    the mustChangePassword marker is set. Sets the new password and clears the
- *    marker (GCIP claim + tenant_users mirror), task 2.3.
- *  - GET /auth/me: resolved identity + tenant/projects bootstrap. Allowed during
- *    password change so the dashboard can render the forced-change screen.
+ *    the mustChangePassword marker is set. Sets the new password and clears
+ *    the marker.
+ *  - GET /auth/me: resolved identity + tenant/projects bootstrap.
  *
- * Both rely on the request transaction (RLS-scoped) and the verified identity in
- * RequestContext. The marker's authoritative source is the GCIP custom claim;
- * the tenant_users column is the display mirror (kept in sync here).
+ * login/refresh/logout are unauthenticated (@Public()) and read outside the
+ * request transaction (DbService.superadmin: a non-transactional handle on
+ * the BYPASSRLS pool — there is no tenant RLS context yet before a token
+ * exists). complete-password-change and me rely on the request transaction
+ * (RLS-scoped) and the verified identity in RequestContext.
  */
 @Injectable()
 export class AuthRoutesService {
   constructor(
     private readonly ctx: RequestContext,
-    private readonly firebase: FirebaseService,
+    private readonly db: DbService,
+    private readonly identity: IdentityService,
+    private readonly password: PasswordService,
+    private readonly tokens: TokenService,
   ) {}
+
+  /** POST /auth/login. */
+  async login(input: LoginRequest): Promise<TokenPairResponse> {
+    const invalid = () =>
+      new AppException('unauthenticated', 'Invalid credentials', HttpStatus.UNAUTHORIZED);
+
+    if (!input.tenantSlug) {
+      const rows = await this.db.superadmin
+        .select()
+        .from(superAdmins)
+        .where(eq(superAdmins.email, input.email))
+        .limit(1);
+      const admin = rows[0];
+      if (!admin || admin.status !== 'active') {
+        await this.password.verifyDummyPassword(input.password);
+        throw invalid();
+      }
+      const ok = await this.password.verifyPassword(admin.passwordHash, input.password);
+      if (!ok) throw invalid();
+      return toTokenPairResponse(await this.tokens.issueTokenPair('super_admin', admin.id));
+    }
+
+    const tenantRows = await this.db.superadmin
+      .select()
+      .from(tenants)
+      .where(eq(tenants.slug, input.tenantSlug))
+      .limit(1);
+    const tenant = tenantRows[0];
+    if (!tenant) {
+      await this.password.verifyDummyPassword(input.password);
+      throw invalid();
+    }
+
+    const userRows = await this.db.superadmin
+      .select()
+      .from(tenantUsers)
+      .where(and(eq(tenantUsers.tenantId, tenant.id), eq(tenantUsers.email, input.email)))
+      .limit(1);
+    const user = userRows[0];
+    if (!user || user.status !== 'active') {
+      await this.password.verifyDummyPassword(input.password);
+      throw invalid();
+    }
+    const ok = await this.password.verifyPassword(user.passwordHash, input.password);
+    if (!ok) throw invalid();
+
+    return toTokenPairResponse(await this.tokens.issueTokenPair('tenant_user', user.id));
+  }
+
+  /** POST /auth/refresh. */
+  async refresh(refreshToken: string | undefined): Promise<TokenPairResponse> {
+    if (!refreshToken) {
+      throw new AppException('unauthenticated', 'Missing refresh token', HttpStatus.UNAUTHORIZED);
+    }
+    return toTokenPairResponse(await this.tokens.refresh(refreshToken));
+  }
+
+  /** POST /auth/logout. */
+  async logout(refreshToken: string | undefined): Promise<void> {
+    if (refreshToken) {
+      await this.tokens.revokeRefreshToken(refreshToken);
+    }
+  }
 
   /** POST /auth/complete-password-change: set new password, clear the marker. */
   async completePasswordChange(input: CompletePasswordChangeRequest): Promise<{ mustChangePassword: false }> {
@@ -35,36 +114,8 @@ export class AuthRoutesService {
       throw new AppException('forbidden', 'Tenant user required', HttpStatus.FORBIDDEN);
     }
 
-    // Load self + the GCIP tenant id (RLS-scoped, explicit predicate).
-    const rows = await this.ctx.dbTx
-      .select({
-        role: tenantUsers.role,
-        gcipUid: tenantUsers.gcipUid,
-        gcipTenantId: tenants.gcipTenantId,
-      })
-      .from(tenantUsers)
-      .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-      .where(and(eq(tenantUsers.id, actingUserId), eq(tenantUsers.tenantId, tenantId)))
-      .limit(1);
-    const self = rows[0];
-    if (!self) {
-      throw new AppException('not_found', 'User not found', HttpStatus.NOT_FOUND);
-    }
-
-    // Set the new password in GCIP, then clear the marker claim.
-    await this.firebase.setTenantUserPassword(self.gcipTenantId, self.gcipUid, input.newPassword);
-    await this.firebase.clearMustChangePassword(
-      self.gcipTenantId,
-      self.gcipUid,
-      tenantId,
-      self.role as Role,
-    );
-
-    // Mirror the cleared marker in the read model.
-    await this.ctx.dbTx
-      .update(tenantUsers)
-      .set({ mustChangePassword: false, updatedAt: new Date() })
-      .where(and(eq(tenantUsers.id, actingUserId), eq(tenantUsers.tenantId, tenantId)));
+    await this.identity.setTenantUserPassword(this.ctx.dbTx, actingUserId, input.newPassword);
+    await this.identity.clearMustChangePassword(this.ctx.dbTx, actingUserId);
 
     return { mustChangePassword: false };
   }
@@ -105,4 +156,16 @@ export class AuthRoutesService {
       projects: projectRows.map(toProject),
     };
   }
+}
+
+function toTokenPairResponse(pair: IssuedTokenPair): TokenPairResponse {
+  return {
+    accessToken: pair.accessToken,
+    refreshToken: pair.refreshToken,
+    uid: pair.uid,
+    role: pair.role,
+    tenantId: pair.tenantId,
+    mustChangePassword: pair.mustChangePassword,
+    expiresAt: pair.expiresAt,
+  };
 }

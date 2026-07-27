@@ -13,6 +13,38 @@ export const authContextSchema = z.object({
 });
 export type AuthContext = z.infer<typeof authContextSchema>;
 
+/** POST /auth/login. Omit tenantSlug to authenticate as the super-admin. */
+export const loginRequestSchema = z.object({
+  tenantSlug: nonEmptyString.optional(),
+  email: z.string().email(),
+  password: nonEmptyString,
+});
+export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+/** POST /auth/login and POST /auth/refresh response. */
+export const tokenPairResponseSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  uid: z.string(),
+  role: z.enum(TOKEN_ROLES),
+  tenantId: uuid.nullable(),
+  mustChangePassword: z.boolean(),
+  expiresAt: z.string(),
+});
+export type TokenPairResponse = z.infer<typeof tokenPairResponseSchema>;
+
+/** POST /auth/refresh */
+export const refreshRequestSchema = z.object({
+  refreshToken: z.string().optional(),
+});
+export type RefreshRequest = z.infer<typeof refreshRequestSchema>;
+
+/** POST /auth/logout */
+export const logoutRequestSchema = z.object({
+  refreshToken: z.string().optional(),
+});
+export type LogoutRequest = z.infer<typeof logoutRequestSchema>;
+
 /** POST /auth/complete-password-change */
 export const completePasswordChangeRequestSchema = z.object({
   newPassword: z.string().min(8),

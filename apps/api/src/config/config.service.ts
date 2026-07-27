@@ -6,12 +6,10 @@ import { z } from 'zod';
  */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  GCP_REGION: z.string().default('europe-west1'),
-  GCP_PROJECT_ID: z.string().default('main-nima'),
   API_PORT: z.coerce.number().int().positive().default(8080),
 
-  // Database connectivity
-  DB_DRIVER: z.enum(['local', 'cloud-sql']).default('local'),
+  // Database connectivity (self-hosted Postgres — the app's own container in
+  // prod, docker-compose in dev; no managed-DB driver).
   DB_HOST: z.string().default('127.0.0.1'),
   DB_PORT: z.coerce.number().int().positive().default(5432),
   DB_NAME: z.string().default('qassistant'),
@@ -26,52 +24,53 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
-  CLOUD_SQL_INSTANCE: z.string().optional(),
-  CLOUD_SQL_IP_TYPE: z.enum(['PUBLIC', 'PRIVATE']).default('PUBLIC'),
 
-  // Identity Platform / firebase-admin
-  FIREBASE_AUTH_EMULATOR_HOST: z.string().optional(),
-  FIREBASE_PROJECT_ID: z.string().default('main-nima'),
+  // Self-hosted auth (opaque bearer tokens, see auth/token.service.ts).
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(7200),
+  REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
 
-  // GCS
-  ARTIFACTS_BUCKET: z.string().default('qassistant-artifacts-local'),
-  STORAGE_EMULATOR_HOST: z.string().optional(),
-  UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().default(900),
-  // Storage driver: 'local' mints fake signed URLs (no GCP); 'gcs' uses V4 signing.
-  STORAGE_DRIVER: z.enum(['local', 'gcs']).default('local'),
-  // Base URL of a local upload sink used only by the 'local' storage driver.
-  LOCAL_UPLOAD_BASE_URL: z.string().default('http://127.0.0.1:4443'),
-
-  // Secret Manager: 'local' keeps secrets in a temp dir; 'gcp' uses the API.
-  SECRETS_DRIVER: z.enum(['local', 'gcp']).default('local'),
+  // Secrets: envelope encryption key for the 'postgres' SecretManager driver
+  // (32 bytes, base64). Never itself stored in the database.
+  SECRETS_DRIVER: z.enum(['local', 'postgres']).default('local'),
+  SECRETS_ENCRYPTION_KEY: z.string().optional(),
   LOCAL_SECRETS_DIR: z.string().optional(),
+
+  // Object storage: 'local' mints fake signed URLs (no dependency); 's3' uses
+  // an S3-compatible endpoint (MinIO in prod) with real presigned URLs.
+  ARTIFACTS_BUCKET: z.string().default('qassistant-artifacts-local'),
+  UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  LOCAL_UPLOAD_BASE_URL: z.string().default('http://127.0.0.1:4443'),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
 
   // Jira: 'local' uses an in-memory fixture client; 'http' calls the live REST API.
   JIRA_DRIVER: z.enum(['local', 'http']).default('local'),
 
   // Shared secret guarding internal worker endpoints (inactivity / purge) in
-  // local/dev. In prod these are OIDC-gated at the ingress; this is a backstop.
+  // local/dev, and the Cloud-Tasks-worker-endpoint compatibility path.
   INTERNAL_TASK_TOKEN: z.string().default('local-internal-task-token'),
 
   // Gemini
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL_FLASH: z.string().default('gemini-flash-latest'),
   GEMINI_MODEL_PRO: z.string().default('gemini-pro-latest'),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
 
-  // Cloud Tasks. 'inline' runs the codegen worker synchronously in-process
-  // (offline dev); 'cloud-tasks' enqueues to a real queue targeting the
-  // OIDC-gated worker endpoint.
-  CLOUD_TASKS_DRIVER: z.enum(['inline', 'cloud-tasks']).default('inline'),
-  CLOUD_TASKS_QUEUE: z.string().default('codegen'),
-  CLOUD_TASKS_LOCATION: z.string().default('europe-west1'),
-  CLOUD_TASKS_TARGET_BASE_URL: z.string().default('http://127.0.0.1:8080'),
-  // Service account the queue uses to mint the OIDC token for the worker call.
-  CLOUD_TASKS_INVOKER_SA: z.string().optional(),
+  // Async codegen queue. 'inline' runs the worker synchronously in-process
+  // (tests/dev). 'postgres' enqueues to codegen_jobs; CodegenPollerService
+  // claims and runs it in-process (self-hosted VPS migration; replaces Cloud
+  // Tasks — no separate worker container or Redis).
+  CLOUD_TASKS_DRIVER: z.enum(['inline', 'postgres']).default('inline'),
 });
 
-export type AppConfig = Readonly<z.infer<typeof envSchema>> & {
-  readonly isEmulator: boolean;
-};
+export type AppConfig = Readonly<z.infer<typeof envSchema>>;
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const parsed = envSchema.safeParse(env);
@@ -81,9 +80,5 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       .join('; ');
     throw new Error(`Invalid environment configuration: ${issues}`);
   }
-  const cfg = parsed.data;
-  return Object.freeze({
-    ...cfg,
-    isEmulator: cfg.DB_DRIVER === 'local' || Boolean(cfg.FIREBASE_AUTH_EMULATOR_HOST),
-  });
+  return Object.freeze(parsed.data);
 }

@@ -21,7 +21,7 @@ import type { Database } from '../db/db.service.js';
  * single shared instance across guard, interceptor, and handler.
  */
 export interface RequestState {
-  /** GCIP uid from the verified token. */
+  /** Subject id from the verified token (tenant_users.id, or super_admins.id). */
   uid?: string;
   /** Token role: admin | qa-engineer | super-admin. */
   role?: TokenRole;
@@ -29,7 +29,7 @@ export interface RequestState {
   tenantId: string | null;
   /** mustChangePassword claim from the token. */
   mustChangePassword: boolean;
-  /** The acting tenant_users row id (resolved by gcip_uid); null for super-admin. */
+  /** The acting tenant_users row id (equal to `uid` for tenant users); null for super-admin. */
   actingUserId: string | null;
   /** The per-request DB handle (tenant- or super-admin-scoped transaction). */
   dbTx?: Database;

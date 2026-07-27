@@ -93,8 +93,8 @@ function renderSignIn(prefillTenant: string | null): void {
   });
   const tenant = el('input', {
     type: 'text',
-    placeholder: 'GCIP tenant id',
-    value: prefillTenant ?? config.firebaseTenantId,
+    placeholder: 'tenant slug (blank for super-admin)',
+    value: prefillTenant ?? config.tenantSlug,
   });
   const submit = el('button', { textContent: 'Sign in' });
 
@@ -114,7 +114,7 @@ function renderSignIn(prefillTenant: string | null): void {
 async function doSignIn(
   email: string,
   password: string,
-  tenantId: string,
+  tenantSlug: string,
   submit: HTMLButtonElement,
 ): Promise<void> {
   showError(null);
@@ -127,7 +127,7 @@ async function doSignIn(
     type: 'auth:signIn',
     email,
     password,
-    tenantId: tenantId || undefined,
+    tenantSlug: tenantSlug || undefined,
   });
   submit.disabled = false;
   if (!res.ok) {

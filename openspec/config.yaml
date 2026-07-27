@@ -10,7 +10,9 @@ context: |
   - Backend verifies identity, stores session metadata/artifacts, validates Jira,
     and orchestrates code generation.
   - Dashboard provides role-scoped visibility.
-  - Infrastructure target is GCP managed services deployed by Terraform.
+  - Infrastructure target is a single self-hosted VPS, provisioned with Docker
+    Compose and deployed via GitHub Actions CI/CD (see the
+    self-hosted-vps-migration change).
 
   Planning bias:
   - Challenge broad claims before implementation.

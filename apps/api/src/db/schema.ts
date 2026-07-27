@@ -64,7 +64,9 @@ export const tenants = pgTable(
   {
     id: uuid('id').primaryKey(),
     name: text('name').notNull(),
-    gcipTenantId: text('gcip_tenant_id').notNull(),
+    // Human-readable tenant identifier used to resolve which tenant a login is
+    // for (self-hosted auth, migration 0009); replaces the old GCIP tenant id.
+    slug: text('slug').notNull(),
     status: text('status').notNull().default('active'),
     // Tenant-wide default codegen target. Free-form (the Generate selector allows
     // a custom entry), so deliberately no CHECK constraint. See migration 0002.
@@ -76,7 +78,7 @@ export const tenants = pgTable(
     updatedAt,
   },
   (t) => ({
-    gcipTenantIdUnique: uniqueIndex('tenants_gcip_tenant_id_key').on(t.gcipTenantId),
+    slugUnique: uniqueIndex('tenants_slug_key').on(t.slug),
     statusCheck: check('tenants_status_check', inList('status', TENANT_STATUSES)),
     testTypeCheck: check('tenants_default_test_type_check', inList('default_test_type', TEST_TYPES)),
   }),
@@ -92,8 +94,10 @@ export const tenantUsers = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'restrict' }),
-    gcipUid: text('gcip_uid').notNull(),
     email: text('email').notNull(),
+    // Argon2id hash of the user's password (self-hosted auth, migration 0009);
+    // replaces the GCIP-managed credential.
+    passwordHash: text('password_hash').notNull(),
     role: text('role').notNull(),
     status: text('status').notNull().default('active'),
     mustChangePassword: boolean('must_change_password').notNull().default(true),
@@ -101,7 +105,6 @@ export const tenantUsers = pgTable(
     updatedAt,
   },
   (t) => ({
-    gcipUidUnique: uniqueIndex('tenant_users_gcip_uid_key').on(t.gcipUid),
     tenantEmailUnique: uniqueIndex('tenant_users_tenant_id_email_key').on(t.tenantId, t.email),
     tenantIdIdx: index('tenant_users_tenant_id_idx').on(t.tenantId),
     roleCheck: check('tenant_users_role_check', inList('role', ROLES)),
@@ -395,6 +398,108 @@ export const generationComments = pgTable(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// 3.10 super_admins (self-hosted auth, migration 0009)
+// ---------------------------------------------------------------------------
+// Platform-level users with no tenant. Previously lived only in Firebase at
+// project level; now a real Postgres row. No RLS: accessed only via the
+// BYPASSRLS/superadmin pool from IdentityService, same posture as `tenants`.
+export const superAdmins = pgTable(
+  'super_admins',
+  {
+    id: uuid('id').primaryKey(),
+    email: text('email').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    // Unlike a tenant user's admin-set password, the super-admin's password is
+    // operator-chosen (seed script env vars) — nothing to force a change from.
+    mustChangePassword: boolean('must_change_password').notNull().default(false),
+    status: text('status').notNull().default('active'),
+    createdAt,
+    updatedAt,
+  },
+  (t) => ({
+    emailUnique: uniqueIndex('super_admins_email_key').on(t.email),
+    statusCheck: check('super_admins_status_check', inList('status', USER_STATUSES)),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// 3.11 auth_tokens (self-hosted auth, migration 0009)
+// ---------------------------------------------------------------------------
+// Opaque bearer tokens (access + refresh) for both tenant_users and
+// super_admins. Only the SHA-256 hash of a token is ever stored; the plaintext
+// token exists only in the login/refresh response. `replaced_by` chains
+// refresh-token rotation so a replayed-but-recently-rotated token can be
+// resolved to its current leaf within a grace window instead of erroring.
+export const authTokens = pgTable(
+  'auth_tokens',
+  {
+    id: uuid('id').primaryKey(),
+    subjectType: text('subject_type').notNull(),
+    subjectId: uuid('subject_id').notNull(),
+    kind: text('kind').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    replacedBy: uuid('replaced_by'),
+  },
+  (t) => ({
+    tokenHashUnique: uniqueIndex('auth_tokens_token_hash_key').on(t.tokenHash),
+    subjectIdx: index('auth_tokens_subject_idx').on(t.subjectType, t.subjectId, t.kind),
+    subjectTypeCheck: check('auth_tokens_subject_type_check', inList('subject_type', ['tenant_user', 'super_admin'])),
+    kindCheck: check('auth_tokens_kind_check', inList('kind', ['access', 'refresh'])),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// 3.12 codegen_jobs (self-hosted async codegen queue, migration 0009)
+// ---------------------------------------------------------------------------
+// Replaces Cloud Tasks. Enqueued by the generate/regenerate endpoints, claimed
+// by the in-process poller via `FOR UPDATE SKIP LOCKED`. No RLS: only touched
+// by internal service code on the BYPASSRLS pool, same as the worker did when
+// invoked by a Cloud Tasks callback (no tenant request context either way).
+export const codegenJobs = pgTable(
+  'codegen_jobs',
+  {
+    id: uuid('id').primaryKey(),
+    tenantId: uuid('tenant_id').notNull(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'restrict' }),
+    payload: jsonb('payload').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+    error: text('error'),
+    createdAt,
+    updatedAt,
+  },
+  (t) => ({
+    statusRunAtIdx: index('codegen_jobs_status_run_at_idx').on(t.status, t.runAt),
+    statusCheck: check(
+      'codegen_jobs_status_check',
+      inList('status', ['pending', 'processing', 'done', 'failed']),
+    ),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// 3.13 encrypted_secrets (self-hosted Secret Manager replacement, migration 0009)
+// ---------------------------------------------------------------------------
+// Envelope-encrypted secret values (Jira tokens, project default creds). Value
+// is AES-256-GCM-encrypted application-side with SECRETS_ENCRYPTION_KEY (which
+// lives only in the server .env, never in this table); `value` is an opaque
+// base64 blob encoding iv + authTag + ciphertext. No RLS: mediated entirely
+// through the SecretManager interface, never queried by tenant request context.
+export const encryptedSecrets = pgTable('encrypted_secrets', {
+  ref: text('ref').primaryKey(),
+  value: text('value').notNull(),
+  createdAt,
+  updatedAt,
+});
+
 /** All tenant-scoped tables that receive the canonical RLS policy (contract section 1). */
 export const TENANT_SCOPED_TABLES = [
   'tenant_users',
@@ -417,5 +522,9 @@ export const schema = {
   flags,
   generatedTests,
   generationComments,
+  superAdmins,
+  authTokens,
+  codegenJobs,
+  encryptedSecrets,
 };
 export type DbSchema = typeof schema;

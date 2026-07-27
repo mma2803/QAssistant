@@ -14,17 +14,7 @@ playwright-report/
 test-results/
 .turbo/
 .vite/
-
-# Terraform
-**/.terraform/
-**/.terraform.lock.hcl
-**/terraform.tfstate
-**/terraform.tfstate.*
-infra/terraform/backend.generated.tf
-infra/terraform/backend.hcl
-infra/terraform/terraform.tfvars
-infra/terraform/*.new
-infra/terraform/*.tfplan
+*.tsbuildinfo
 
 # OS/editor
 .DS_Store

@@ -7,14 +7,16 @@
  * codegen worker, and DashboardService. Each step runs inside a real
  * DbService.withTenant / withSuperadmin transaction, so RLS, the transaction-
  * local tenant var, and the application-layer role scoping are exercised by the
- * services themselves. Only the external boundaries are faked (Identity Platform
- * via FakeFirebase, GCS via an in-memory reader, Gemini via the production
- * offline FakeGeminiClient):
+ * services themselves. Auth (password hashing, token issuance) is self-hosted
+ * and backed by the same Postgres these tests already use, so the harness
+ * wires the real IdentityService/PasswordService/TokenService rather than
+ * faking an external identity provider. Only GCS and Gemini are faked (an
+ * in-memory reader, and the production offline FakeGeminiClient):
  *
  *   1. Super-admin provisions a tenant + first admin (AdminService, BYPASSRLS).
- *   2. Admin adds a qa-engineer (UsersService -> Admin SDK + mirror row).
- *   3. Forced password change clears the marker on BOTH the GCIP claim and the
- *      DB mirror (AuthRoutesService.completePasswordChange).
+ *   2. Admin adds a qa-engineer (UsersService -> IdentityService).
+ *   3. Forced password change clears the mustChangePassword marker and sets
+ *      the new password hash (AuthRoutesService.completePasswordChange).
  *   4. Admin creates a project (ProjectsService).
  *   5. qa-engineer starts a project- and work-context-gated session
  *      (CaptureService.startSession; the no-context case is rejected by the
@@ -120,7 +122,7 @@ async function readMustChangePassword(harness: Harness, userId: string): Promise
 describe('end-to-end MVP flow (service layer)', () => {
   it('1. super-admin provisions a tenant + first admin', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
-    const adminSvc = new AdminService(h.db, h.firebaseAs());
+    const adminSvc = new AdminService(h.db, h.identity);
     const result = await adminSvc.createTenant({
       name: 'Acme QA',
       firstAdmin: { email: `admin-${newId()}@acme.test`, password: 'initial-pw-1' },
@@ -129,7 +131,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     tenantId = result.tenant.id;
     tenantIds.push(tenantId);
     admin = {
-      uid: result.firstAdmin.gcipUid,
+      uid: result.firstAdmin.id,
       role: 'admin',
       tenantId,
       actingUserId: result.firstAdmin.id,
@@ -138,14 +140,14 @@ describe('end-to-end MVP flow (service layer)', () => {
     assert.ok(tenantId && admin.actingUserId);
     assert.equal(result.firstAdmin.role, 'admin');
     assert.equal(result.firstAdmin.mustChangePassword, true);
-    // The GCIP-side account exists with the forced-change marker on its claim.
-    assert.equal(h.firebase.getUserByUid(admin.uid)?.claims.mustChangePassword, true);
+    // The forced-change marker is set on the tenant_users row itself.
+    assert.equal(await readMustChangePassword(h, admin.actingUserId), true);
   });
 
-  it('2. admin adds a qa-engineer (Admin SDK + mirror, mustChangePassword=true)', async (t) => {
+  it('2. admin adds a qa-engineer (IdentityService, mustChangePassword=true)', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     const created = await h.asTenant(admin, async (ctx) => {
-      const users = new UsersService(ctx, h!.firebaseAs());
+      const users = new UsersService(ctx, h!.identity);
       return users.createUser({
         email: `qa-${newId()}@acme.test`,
         password: 'initial-pw-2',
@@ -153,7 +155,7 @@ describe('end-to-end MVP flow (service layer)', () => {
       });
     });
     qa = {
-      uid: created.gcipUid,
+      uid: created.id,
       role: 'qa-engineer',
       tenantId,
       actingUserId: created.id,
@@ -161,11 +163,11 @@ describe('end-to-end MVP flow (service layer)', () => {
     };
     assert.equal(created.role, 'qa-engineer');
     assert.equal(created.mustChangePassword, true);
-    assert.equal(h.firebase.getUserByUid(qa.uid)?.claims.mustChangePassword, true);
+    assert.equal(await readMustChangePassword(h, qa.actingUserId), true);
 
     // A second qa-engineer, used later to prove own-only dashboard scoping.
     const other = await h.asTenant(admin, async (ctx) => {
-      const users = new UsersService(ctx, h!.firebaseAs());
+      const users = new UsersService(ctx, h!.identity);
       return users.createUser({
         email: `qa2-${newId()}@acme.test`,
         password: 'initial-pw-3',
@@ -173,30 +175,31 @@ describe('end-to-end MVP flow (service layer)', () => {
       });
     });
     otherQa = {
-      uid: other.gcipUid,
+      uid: other.id,
       role: 'qa-engineer',
       tenantId,
       actingUserId: other.id,
     };
   });
 
-  it('3. forced password change clears the marker (GCIP claim + DB mirror)', async (t) => {
+  it('3. forced password change clears the marker and sets the new password hash', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     const out = await h.asTenant(qa, async (ctx) => {
-      const auth = new AuthRoutesService(ctx, h!.firebaseAs());
+      const auth = new AuthRoutesService(ctx, h!.db, h!.identity, h!.password, h!.tokens);
       return auth.completePasswordChange({ newPassword: 'new-strong-pw-9' });
     });
     assert.equal(out.mustChangePassword, false);
-
-    // Authoritative source: the GCIP claim no longer carries the marker.
-    const claims = h.firebase.getUserByUid(qa.uid)?.claims ?? {};
-    assert.equal(claims.mustChangePassword, undefined, 'marker cleared on the GCIP claim');
-    assert.equal(claims.role, 'qa-engineer', 'role claim preserved');
-    assert.equal(claims.tenantId, tenantId, 'tenantId claim preserved');
-    // The new password was set in GCIP as part of completing the change.
-    assert.equal(h.firebase.getUserByUid(qa.uid)?.password, 'new-strong-pw-9');
-    // Read-model mirror is cleared too.
     assert.equal(await readMustChangePassword(h, qa.actingUserId), false);
+
+    // The new password was hashed and stored on the tenant_users row.
+    const newHash = await h.db.withSuperadmin(async ({ client }) => {
+      const r = await client.query('SELECT password_hash FROM tenant_users WHERE id = $1', [
+        qa.actingUserId,
+      ]);
+      return r.rows[0]?.password_hash as string | undefined;
+    });
+    assert.ok(newHash, 'password hash was persisted');
+    assert.ok(await h.password.verifyPassword(newHash!, 'new-strong-pw-9'), 'new password verifies');
     qa.mustChangePassword = false;
   });
 

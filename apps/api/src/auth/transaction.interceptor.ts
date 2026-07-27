@@ -22,8 +22,9 @@ import { IS_PUBLIC } from './decorators.js';
  *
  *   - tenant user  -> transaction on the app_user (RLS) pool with
  *                     set_config('app.tenant_id', tenantId, true), then resolves
- *                     the acting tenant_users row by gcip_uid (for authorship
- *                     stamping and status='active' enforcement);
+ *                     the acting tenant_users row by id (the token's `uid` claim
+ *                     IS tenant_users.id) for authorship stamping and
+ *                     status='active' enforcement;
  *   - super-admin  -> transaction on the app_superadmin (BYPASSRLS) pool, no
  *                     tenant var set.
  *
@@ -74,7 +75,7 @@ export class TransactionInterceptor implements NestInterceptor {
         const rows = await db
           .select({ id: tenantUsers.id, status: tenantUsers.status })
           .from(tenantUsers)
-          .where(eq(tenantUsers.gcipUid, ctx.uid!))
+          .where(eq(tenantUsers.id, ctx.uid!))
           .limit(1);
         const actor = rows[0];
         if (!actor) {

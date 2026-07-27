@@ -1,8 +1,8 @@
 /**
  * MCP server configuration, read from the environment. The server holds no
  * long-lived secrets of its own: credentials arrive at the `authenticate` tool
- * call. These values only locate the QAssistant API and the Identity Platform
- * endpoint used to exchange email/password for an ID token.
+ * call. This value only locates the QAssistant API; sign-in goes through the
+ * API's own /auth/login endpoint.
  */
 export interface McpConfig {
   /**
@@ -11,13 +11,6 @@ export interface McpConfig {
    * (see apps/api setGlobalPrefix), so the prefix must be present here.
    */
   apiBaseUrl: string;
-  /** Identity Platform (Firebase Auth) Web API key. */
-  firebaseApiKey: string;
-  /**
-   * When set (dev), sign-in is routed to the Auth emulator at this host
-   * (e.g. "127.0.0.1:9099") instead of the live Identity Toolkit endpoint.
-   */
-  authEmulatorHost?: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): McpConfig {
@@ -27,9 +20,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): McpConfig {
   // calls hit /api/v1/... instead of 404ing at the bare host.
   const hasPathPrefix = /^https?:\/\/[^/]+\/.+/.test(raw);
   const apiBaseUrl = hasPathPrefix ? raw : `${raw}/api/v1`;
-  return {
-    apiBaseUrl,
-    firebaseApiKey: env.FIREBASE_API_KEY ?? 'local-api-key',
-    authEmulatorHost: env.FIREBASE_AUTH_EMULATOR_HOST || undefined,
-  };
+  return { apiBaseUrl };
 }

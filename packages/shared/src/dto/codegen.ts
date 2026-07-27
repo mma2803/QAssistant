@@ -9,7 +9,7 @@ import {
 import { GENERATED_TEST_KINDS, MODEL_TIERS, TEST_TYPES } from '../enums.js';
 import { generatedTestSchema, generationCommentSchema } from '../entities.js';
 
-/** Codegen DTOs (contract section 4.5). Async via Cloud Tasks. */
+/** Codegen DTOs (contract section 4.5). Async via a Postgres-backed job queue. */
 
 /**
  * POST /sessions/{sessionId}/generate: enqueue a codegen job. `framework` and
@@ -89,9 +89,10 @@ export const regenerateRequestSchema = z.object({
 export type RegenerateRequest = z.infer<typeof regenerateRequestSchema>;
 
 /**
- * POST /internal/tasks/generate: Cloud Tasks worker payload (OIDC-gated, not
+ * POST /internal/tasks/generate: internal worker payload (token-gated, not
  * client-facing). Carries everything the worker needs to run Gemini and write a
- * generated_tests row under the right tenant.
+ * generated_tests row under the right tenant. In prod this is invoked by the
+ * in-process codegen job poller, not called over HTTP.
  */
 export const generateTaskPayloadSchema = z.object({
   jobId: uuid,

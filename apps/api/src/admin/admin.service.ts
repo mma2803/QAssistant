@@ -7,68 +7,69 @@ import type {
   TenantUser,
   UpdateTenantRequest,
 } from '@qassistant/shared';
-import { DbService } from '../db/db.service.js';
-import { FirebaseService } from '../auth/firebase.service.js';
+import { DbService, type Database } from '../db/db.service.js';
+import { IdentityService } from '../auth/identity.service.js';
 import { tenants, tenantUsers } from '../db/schema.js';
 import { newId } from '../db/id.js';
 import { AppException } from '../auth/errors.js';
 import { toTenant, toTenantUser } from '../common/serializers.js';
+import { slugify } from '../common/slugify.js';
 
 /**
  * Super-admin provisioning (contract section 4.1). Runs on the privileged
  * BYPASSRLS path (DbService.withSuperadmin): the super-admin has no tenant
  * binding (D10/D24) so it must not set app.tenant_id.
  *
- * Creating a tenant is a two-system write: a GCIP tenant (Identity Platform)
- * plus the `tenants` row, then the first admin user in that GCIP tenant plus
- * its `tenant_users` mirror row. The DB writes share one transaction; the GCIP
- * writes happen first so a DB failure rolls back to a state where the only
- * orphan is an unused GCIP tenant/user (acceptable for MVP; no email sent).
+ * Creating a tenant is a single transaction now that identity lives directly
+ * in Postgres: insert the `tenants` row (with a generated slug), then the
+ * first admin's `tenant_users` row via IdentityService (hashes the
+ * admin-chosen initial password).
  */
 @Injectable()
 export class AdminService {
   constructor(
     private readonly db: DbService,
-    private readonly firebase: FirebaseService,
+    private readonly identity: IdentityService,
   ) {}
 
-  /** POST /admin/tenants: create GCIP tenant + tenants row + first admin user. */
+  /** POST /admin/tenants: create the tenants row + first admin user. */
   async createTenant(input: CreateTenantRequest): Promise<CreateTenantResponse> {
-    const gcipTenantId = await this.firebase.createGcipTenant(input.name);
-
     const tenantId = newId();
-    const firstAdminUid = await this.firebase.createTenantUser({
-      gcipTenantId,
-      appTenantId: tenantId,
-      email: input.firstAdmin.email,
-      password: input.firstAdmin.password,
-      role: 'admin',
-    });
 
     return this.db.withSuperadmin(async ({ db }) => {
+      const slug = await this.uniqueSlug(db, input.name);
       const [tenantRow] = await db
         .insert(tenants)
-        .values({ id: tenantId, name: input.name, gcipTenantId, status: 'active' })
+        .values({ id: tenantId, name: input.name, slug, status: 'active' })
         .returning();
 
-      const [userRow] = await db
-        .insert(tenantUsers)
-        .values({
-          id: newId(),
-          tenantId,
-          gcipUid: firstAdminUid,
-          email: input.firstAdmin.email,
-          role: 'admin',
-          status: 'active',
-          mustChangePassword: true,
-        })
-        .returning();
+      const firstAdminId = await this.identity.createTenantUser(db, {
+        tenantId,
+        email: input.firstAdmin.email,
+        password: input.firstAdmin.password,
+        role: 'admin',
+      });
+      const [userRow] = await db.select().from(tenantUsers).where(eq(tenantUsers.id, firstAdminId));
 
       return {
         tenant: toTenant(tenantRow!),
         firstAdmin: toTenantUser(userRow!),
       };
     });
+  }
+
+  /** Generate a URL-safe, unique tenant slug from the display name (login-time tenant selector). */
+  private async uniqueSlug(db: Database, name: string): Promise<string> {
+    const base = slugify(name) || 'tenant';
+    let candidate = base;
+    let suffix = 0;
+    // Small tenant counts expected; a short linear probe is fine.
+    for (;;) {
+      const existing = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, candidate)).limit(1);
+      if (existing.length === 0) return candidate;
+      suffix += 1;
+      candidate = `${base}-${suffix}`;
+    }
   }
 
   /** GET /admin/tenants: list all tenants (privileged path, no RLS). */

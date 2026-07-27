@@ -5,7 +5,7 @@ import { SetMetadata } from '@nestjs/common';
  * controllers/handlers with these.
  */
 
-/** Skip token verification entirely (health, Cloud Tasks OIDC endpoints handle their own auth). */
+/** Skip token verification entirely (health, internal worker endpoints handle their own auth). */
 export const IS_PUBLIC = 'auth:isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC, true);
 

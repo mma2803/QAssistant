@@ -52,7 +52,7 @@ export const setProjectTestFrameworkRequestSchema = z.object({
 });
 export type SetProjectTestFrameworkRequest = z.infer<typeof setProjectTestFrameworkRequestSchema>;
 
-/** PUT /projects/{projectId}/jira: create/replace Jira config (token goes to Secret Manager). */
+/** PUT /projects/{projectId}/jira: create/replace Jira config (token goes to the encrypted secrets store). */
 export const setJiraConfigRequestSchema = z.object({
   baseUrl: z.string().url(),
   projectKey: nonEmptyString,

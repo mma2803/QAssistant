@@ -132,9 +132,8 @@ before(async () => {
 
   const provA = await provisionTenant(pools, {
     tenantName: 'Tenant A',
-    gcipTenantId: `gcip-A-${newId()}`,
+    slug: `tenant-a-${newId()}`,
     adminEmail: `admin-a-${newId()}@example.com`,
-    adminUid: `uid-a-${newId()}`,
   });
   tenantA = provA.tenantId;
   adminA = provA.adminUserId;
@@ -142,9 +141,8 @@ before(async () => {
 
   const provB = await provisionTenant(pools, {
     tenantName: 'Tenant B',
-    gcipTenantId: `gcip-B-${newId()}`,
+    slug: `tenant-b-${newId()}`,
     adminEmail: `admin-b-${newId()}@example.com`,
-    adminUid: `uid-b-${newId()}`,
   });
   tenantB = provB.tenantId;
   adminB = provB.adminUserId;
@@ -325,13 +323,12 @@ describe('RLS cross-tenant isolation', () => {
 
   it('a non-provisioned identity resolves to no acting user (cannot act)', async (t) => {
     if (!reachable || !pools) return t.skip('no Postgres');
-    // The transaction interceptor resolves the acting user by gcip_uid within
-    // the tenant transaction; a non-provisioned uid resolves to no row and the
-    // request is rejected as unauthenticated. Model that lookup here.
+    // The transaction interceptor resolves the acting user by id (the token's
+    // uid claim) within the tenant transaction; a non-provisioned id resolves
+    // to no row and the request is rejected as unauthenticated. Model that
+    // lookup here.
     await withTenant(pools, tenantA, async (c) => {
-      const r = await c.query('SELECT id FROM tenant_users WHERE gcip_uid = $1', [
-        `never-provisioned-${newId()}`,
-      ]);
+      const r = await c.query('SELECT id FROM tenant_users WHERE id = $1', [newId()]);
       assert.equal(r.rowCount, 0, 'unknown identity has no tenant_users row -> no acting user');
     });
   });

@@ -11,9 +11,11 @@ import type { AppConfig } from '../config/config.service.js';
  * read, list, or delete (the URL signs exactly one method + one resource).
  *
  * Two drivers behind one interface:
- *   - 'gcs'   : @google-cloud/storage getSignedUrl (V4, action 'write').
+ *   - 's3'    : S3-compatible presigned PUT URL (@aws-sdk/client-s3 +
+ *               @aws-sdk/s3-request-presigner), pointed at MinIO in prod via
+ *               S3_ENDPOINT (self-hosted VPS migration; replaces GCS).
  *   - 'local' : a deterministic fake signed URL (HMAC over the same fields) that
- *               works offline against a fake-gcs/local sink. Never used in prod.
+ *               works offline against a local sink. Never used in prod.
  */
 export interface SignedUploadUrl {
   /** The full object path within the bucket (the GCS key). */
@@ -77,7 +79,7 @@ export class LocalGcsSigner implements GcsSigner {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     this.bucket = config.ARTIFACTS_BUCKET;
     this.ttl = config.UPLOAD_URL_TTL_SECONDS;
-    this.base = config.STORAGE_EMULATOR_HOST ?? config.LOCAL_UPLOAD_BASE_URL;
+    this.base = config.LOCAL_UPLOAD_BASE_URL;
   }
 
   async signUpload(params: SignUploadParams): Promise<SignedUploadUrl> {
@@ -104,34 +106,45 @@ export class LocalGcsSigner implements GcsSigner {
 }
 
 @Injectable()
-export class CloudGcsSigner implements GcsSigner {
+export class S3GcsSigner implements GcsSigner {
   private readonly bucket: string;
   private readonly ttl: number;
-  private storage: any;
+  private client: any;
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     this.bucket = config.ARTIFACTS_BUCKET;
     this.ttl = config.UPLOAD_URL_TTL_SECONDS;
   }
 
-  private async getStorage(): Promise<any> {
-    if (this.storage) return this.storage;
-    const mod: any = await import('@google-cloud/storage' as string);
-    this.storage = new mod.Storage();
-    return this.storage;
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client;
+    const mod: any = await import('@aws-sdk/client-s3' as string);
+    this.client = new mod.S3Client({
+      endpoint: this.config.S3_ENDPOINT,
+      region: this.config.S3_REGION,
+      forcePathStyle: this.config.S3_FORCE_PATH_STYLE,
+      credentials: {
+        accessKeyId: this.config.S3_ACCESS_KEY_ID,
+        secretAccessKey: this.config.S3_SECRET_ACCESS_KEY,
+      },
+    });
+    return this.client;
   }
 
   async signUpload(params: SignUploadParams): Promise<SignedUploadUrl> {
-    const storage = await this.getStorage();
+    const [{ PutObjectCommand }, { getSignedUrl }, client] = await Promise.all([
+      import('@aws-sdk/client-s3' as string),
+      import('@aws-sdk/s3-request-presigner' as string),
+      this.getClient(),
+    ]);
     const expiresAtMs = Date.now() + this.ttl * 1000;
-    const file = storage.bucket(this.bucket).file(params.gcsPath);
-    // V4 write (PUT) URL for exactly this object. No read/list/delete granted.
-    const [uploadUrl] = await file.getSignedUrl({
-      version: 'v4',
-      action: 'write',
-      expires: expiresAtMs,
-      contentType: params.contentType,
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: params.gcsPath,
+      ContentType: params.contentType,
     });
+    // Presigned PUT for exactly this object. No read/list/delete granted.
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: this.ttl });
     return {
       gcsPath: params.gcsPath,
       uploadUrl,

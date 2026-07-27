@@ -1,25 +1,22 @@
 /**
  * First super-admin bootstrap (task 2.1, spec "First super-admin bootstrap").
  *
- * Creates the platform-level super-admin GCIP account (no tenant) and bakes the
- * `{ role: 'super-admin' }` custom claim. This is the ONLY way the first
- * super-admin is created: there is no UI path (spec). Run it once after the
- * Identity Platform / Firebase Auth emulator is up.
+ * Creates the platform-level super-admin row (no tenant) directly in Postgres.
+ * This is the ONLY way the first super-admin is created: there is no UI path
+ * (spec). Run it once after migrations have been applied.
  *
  * Usage:
  *   SUPER_ADMIN_EMAIL=ops@example.com SUPER_ADMIN_PASSWORD='changeme123' \
- *   FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_PROJECT_ID=main-nima \
  *   node --import tsx apps/api/src/scripts/seed-super-admin.ts
  *
- * Idempotent: re-running re-applies the password and the super-admin claim to
- * the existing account.
- *
- * Locally this talks to the Firebase Auth emulator (FIREBASE_AUTH_EMULATOR_HOST,
- * D28). In a real environment it uses application default credentials.
+ * Idempotent: re-running resets the password on the existing account.
  */
 import 'reflect-metadata';
 import { loadConfig } from '../config/config.service.js';
-import { FirebaseService } from '../auth/firebase.service.js';
+import { DbService } from '../db/db.service.js';
+import { PasswordService } from '../auth/password.service.js';
+import { TokenService } from '../auth/token.service.js';
+import { IdentityService } from '../auth/identity.service.js';
 
 async function main(): Promise<void> {
   const email = process.env.SUPER_ADMIN_EMAIL;
@@ -34,20 +31,21 @@ async function main(): Promise<void> {
   }
 
   const config = loadConfig(process.env);
-  // Reuse the Admin SDK wrapper. onModuleInit is normally called by Nest; here
-  // we call it directly since we run outside the application context.
-  const firebase = new FirebaseService(config);
-  firebase.onModuleInit();
+  const db = new DbService(config);
+  await db.init();
 
-  const uid = await firebase.createSuperAdmin(email, password);
+  try {
+    const passwordService = new PasswordService();
+    const tokenService = new TokenService(config, db);
+    const identity = new IdentityService(db, passwordService, tokenService);
 
-  // eslint-disable-next-line no-console
-  console.log(
-    `Super-admin ready: uid=${uid}, email=${email}` +
-      (config.FIREBASE_AUTH_EMULATOR_HOST
-        ? ` (Auth emulator ${config.FIREBASE_AUTH_EMULATOR_HOST})`
-        : ''),
-  );
+    const id = await identity.createSuperAdmin(email, password);
+
+    // eslint-disable-next-line no-console
+    console.log(`Super-admin ready: id=${id}, email=${email}`);
+  } finally {
+    await db.onModuleDestroy();
+  }
 }
 
 main().catch((err) => {

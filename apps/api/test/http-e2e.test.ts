@@ -2,9 +2,10 @@
  * HTTP transport E2E coverage for the OpenSpec MVP contract.
  *
  * This starts the real Nest application and drives its REST surface through
- * Firebase Auth emulator ID tokens, the real auth guard/transaction
- * interceptor, PostgreSQL RLS, validation pipes, controllers, and services.
- * Only external managed services use their documented local drivers.
+ * real access tokens minted by the app's own /auth/login endpoint, the real
+ * auth guard/transaction interceptor, PostgreSQL RLS, validation pipes,
+ * controllers, and services. Object storage runs against a real MinIO
+ * (STORAGE_DRIVER=s3), started by `npm run dev:infra` / test:e2e:infra.
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,9 +17,8 @@ import type { INestApplication } from '@nestjs/common';
 import { ensureSchema, isDbReachable, cleanupTenants, makePools, newId } from './helpers/db.js';
 import { inventoryApiRoutes, routeWasRequested } from '../../../scripts/e2e-coverage-lib.mjs';
 
-const FIREBASE_PROJECT_ID = 'main-nima';
-const FIREBASE_EMULATOR = 'http://127.0.0.1:9099';
-const GCS_EMULATOR = 'http://127.0.0.1:4443';
+const MINIO_HEALTH = 'http://127.0.0.1:9000/minio/health/live';
+const S3_ENDPOINT = 'http://127.0.0.1:9000';
 const INTERNAL_TOKEN = 'local-internal-task-token';
 const secretsDir = join(tmpdir(), `qassistant-http-e2e-${process.pid}`);
 
@@ -69,42 +69,47 @@ async function request<T = unknown>(
   return { status: res.status, headers: res.headers, body: body as T };
 }
 
-async function signIn(email: string, password: string, tenantId?: string): Promise<string> {
-  const res = await fetch(
-    `${FIREBASE_EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=e2e-key`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        password,
-        returnSecureToken: true,
-        ...(tenantId ? { tenantId } : {}),
-      }),
-    },
+/** Sign in via the app's own /auth/login endpoint. `tenantSlug` omitted signs in as super-admin. */
+async function signIn(email: string, password: string, tenantSlug?: string): Promise<string> {
+  const res = await request<{ accessToken?: string; error?: { message?: string } }>(
+    '/api/v1/auth/login',
+    { method: 'POST', body: { email, password, tenantSlug } },
   );
-  const body = (await res.json()) as { idToken?: string; error?: { message?: string } };
-  assert.equal(res.status, 200, `Firebase sign-in failed: ${body.error?.message ?? res.status}`);
-  assert.ok(body.idToken);
-  return body.idToken;
+  assert.equal(res.status, 201, `Login failed: ${res.body.error?.message ?? res.status}`);
+  assert.ok(res.body.accessToken);
+  return res.body.accessToken;
 }
 
-async function ensureBucket(): Promise<void> {
-  const res = await fetch(`${GCS_EMULATOR}/storage/v1/b?project=${FIREBASE_PROJECT_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'qassistant-artifacts-local' }),
-  });
-  assert.ok([200, 201, 409].includes(res.status), `Could not prepare fake GCS bucket: ${res.status}`);
+/** Idempotent super-admin seed, mirroring src/scripts/seed-super-admin.ts. */
+async function createSuperAdmin(email: string, password: string): Promise<void> {
+  const [{ loadConfig }, { DbService }, { PasswordService }, { TokenService }, { IdentityService }] =
+    await Promise.all([
+      import('../dist/config/config.service.js'),
+      import('../dist/db/db.service.js'),
+      import('../dist/auth/password.service.js'),
+      import('../dist/auth/token.service.js'),
+      import('../dist/auth/identity.service.js'),
+    ]);
+  const config = loadConfig(process.env);
+  const db = new DbService(config);
+  await db.init();
+  try {
+    const passwordSvc = new PasswordService();
+    const tokens = new TokenService(config, db);
+    const identity = new IdentityService(db, passwordSvc, tokens);
+    await identity.createSuperAdmin(email, password);
+  } finally {
+    await db.onModuleDestroy();
+  }
 }
 
 before(async () => {
   process.env.NODE_ENV = 'test';
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-  process.env.FIREBASE_PROJECT_ID = FIREBASE_PROJECT_ID;
-  process.env.STORAGE_DRIVER = 'local';
-  process.env.STORAGE_EMULATOR_HOST = GCS_EMULATOR;
-  process.env.LOCAL_UPLOAD_BASE_URL = GCS_EMULATOR;
+  process.env.STORAGE_DRIVER = 's3';
+  process.env.S3_ENDPOINT = S3_ENDPOINT;
+  process.env.S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID ?? 'qassistant-dev';
+  process.env.S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY ?? 'qassistant-dev-secret';
+  process.env.S3_FORCE_PATH_STYLE = 'true';
   process.env.SECRETS_DRIVER = 'local';
   process.env.LOCAL_SECRETS_DIR = secretsDir;
   process.env.JIRA_DRIVER = 'local';
@@ -112,20 +117,16 @@ before(async () => {
   process.env.INTERNAL_TASK_TOKEN = INTERNAL_TOKEN;
   delete process.env.GEMINI_API_KEY;
 
-  available =
-    (await isDbReachable()) &&
-    (await reachable(`${FIREBASE_EMULATOR}/`)) &&
-    (await reachable(`${GCS_EMULATOR}/storage/v1/b`));
+  available = (await isDbReachable()) && (await reachable(MINIO_HEALTH));
   if (!available) {
     if (process.env.REQUIRE_E2E_INFRA === 'true') {
-      throw new Error('HTTP E2E requires local Postgres, Firebase Auth, and fake GCS emulators');
+      throw new Error('HTTP E2E requires local Postgres and MinIO (npm run dev:infra)');
     }
-    console.warn('[http-e2e] local Postgres/Firebase/fake-GCS unavailable; skipping.');
+    console.warn('[http-e2e] local Postgres/MinIO unavailable; skipping.');
     return;
   }
 
   await ensureSchema();
-  await ensureBucket();
 
   const [{ NestFactory }, { AppModule }, { HttpExceptionFilter }] = await Promise.all([
     import('@nestjs/core'),
@@ -164,7 +165,7 @@ describe('HTTP REST surface', () => {
     });
 
     const invalid = await request<{ error: { code: string; message: string } }>('/api/v1/projects', {
-      token: 'not-a-firebase-token',
+      token: 'not-a-real-token',
     });
     assert.equal(invalid.status, 401);
     assert.deepEqual(invalid.body, {
@@ -178,14 +179,10 @@ describe('HTTP REST surface', () => {
     const suffix = newId();
     const email = `scope-${suffix}@example.test`;
     const password = 'scope-password-123';
-    const { loadConfig } = await import('../dist/config/config.service.js');
-    const { FirebaseService } = await import('../dist/auth/firebase.service.js');
-    const firebase = new FirebaseService(loadConfig(process.env));
-    firebase.onModuleInit();
-    await firebase.createSuperAdmin(email, password);
+    await createSuperAdmin(email, password);
     const token = await signIn(email, password);
 
-    const malformed = await request<{ error: { code: string } }>('/api/v1', {
+    const malformed = await request<{ error: { code: string } }>('/api/v1/admin/tenants', {
       method: 'POST',
       token,
       body: { name: '' },
@@ -217,11 +214,7 @@ describe('HTTP REST surface', () => {
     const adminPassword = 'admin-password-456';
     const qaPassword = 'qa-password-456';
 
-    const { loadConfig } = await import('../dist/config/config.service.js');
-    const { FirebaseService } = await import('../dist/auth/firebase.service.js');
-    const firebase = new FirebaseService(loadConfig(process.env));
-    firebase.onModuleInit();
-    await firebase.createSuperAdmin(superEmail, initialPassword);
+    await createSuperAdmin(superEmail, initialPassword);
     const superToken = await signIn(superEmail, initialPassword);
 
     const health = await request<{ status: string; db: string }>('/health');
@@ -232,7 +225,7 @@ describe('HTTP REST surface', () => {
     assert.equal(unauthenticated.status, 401);
 
     const provision = await request<{
-      tenant: { id: string; gcipTenantId: string };
+      tenant: { id: string; slug: string };
       firstAdmin: { id: string };
     }>('/api/v1/admin/tenants', {
       method: 'POST',
@@ -244,13 +237,13 @@ describe('HTTP REST surface', () => {
     });
     assert.equal(provision.status, 201);
     tenantId = provision.body.tenant.id;
-    const gcipTenantId = provision.body.tenant.gcipTenantId;
+    const tenantSlug = provision.body.tenant.slug;
 
     const tenants = await request<unknown[]>('/api/v1/admin/tenants', { token: superToken });
     assert.equal(tenants.status, 200);
     assert.ok(tenants.body.length >= 1);
 
-    let adminToken = await signIn(adminEmail, initialPassword, gcipTenantId);
+    let adminToken = await signIn(adminEmail, initialPassword, tenantSlug);
     const forcedMe = await request<{ mustChangePassword: boolean }>('/api/v1/auth/me', {
       token: adminToken,
     });
@@ -267,7 +260,7 @@ describe('HTTP REST surface', () => {
     );
     assert.equal(changed.status, 201);
     assert.equal(changed.body.mustChangePassword, false);
-    adminToken = await signIn(adminEmail, adminPassword, gcipTenantId);
+    adminToken = await signIn(adminEmail, adminPassword, tenantSlug);
 
     const adminMe = await request<{ role: string; tenantId: string }>('/api/v1/auth/me', {
       token: adminToken,
@@ -317,7 +310,7 @@ describe('HTTP REST surface', () => {
     assert.equal(reset.status, 201);
     assert.equal(reset.body.mustChangePassword, true);
 
-    let qaToken = await signIn(qaEmail, initialPassword, gcipTenantId);
+    let qaToken = await signIn(qaEmail, initialPassword, tenantSlug);
     const qaAdminDenied = await request('/api/v1/users', { token: qaToken });
     assert.equal(qaAdminDenied.status, 403);
     const qaChanged = await request('/api/v1/auth/complete-password-change', {
@@ -326,7 +319,7 @@ describe('HTTP REST surface', () => {
       body: { newPassword: qaPassword },
     });
     assert.equal(qaChanged.status, 201);
-    qaToken = await signIn(qaEmail, qaPassword, gcipTenantId);
+    qaToken = await signIn(qaEmail, qaPassword, tenantSlug);
 
     const projectCreated = await request<{ id: string }>('/api/v1/projects', {
       method: 'POST',
@@ -434,7 +427,7 @@ describe('HTTP REST surface', () => {
         headers: item.requiredHeaders,
         body: bytes,
       });
-      assert.ok(upload.ok, `fake GCS upload failed: ${upload.status}`);
+      assert.ok(upload.ok, `artifact upload failed: ${upload.status}`);
       const artifact = await request<{ id: string; type: string }>(
         `/api/v1/sessions/${sessionId}/artifacts`,
         {
@@ -688,6 +681,35 @@ describe('HTTP REST surface', () => {
     assert.equal(settingsUpdate.status, 200);
     assert.equal(settingsUpdate.body.defaultTestFramework, 'Cypress');
     assert.equal(settingsUpdate.body.defaultTestLanguage, 'JavaScript');
+
+    // Refresh + logout (full auth lifecycle, not just login).
+    const freshLogin = await request<{ accessToken: string; refreshToken: string }>(
+      '/api/v1/auth/login',
+      { method: 'POST', body: { email: adminEmail, password: adminPassword, tenantSlug } },
+    );
+    assert.equal(freshLogin.status, 201);
+    const refreshed = await request<{ accessToken: string; refreshToken: string }>(
+      '/api/v1/auth/refresh',
+      { method: 'POST', body: { refreshToken: freshLogin.body.refreshToken } },
+    );
+    assert.equal(refreshed.status, 201);
+    assert.ok(refreshed.body.accessToken);
+    const meAfterRefresh = await request<{ role: string }>('/api/v1/auth/me', {
+      token: refreshed.body.accessToken,
+    });
+    assert.equal(meAfterRefresh.status, 200);
+    assert.equal(meAfterRefresh.body.role, 'admin');
+
+    const loggedOut = await request<{ ok: true }>('/api/v1/auth/logout', {
+      method: 'POST',
+      body: { refreshToken: refreshed.body.refreshToken },
+    });
+    assert.equal(loggedOut.status, 201);
+    const refreshAfterLogout = await request<{ error: { code: string } }>('/api/v1/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: refreshed.body.refreshToken },
+    });
+    assert.equal(refreshAfterLogout.status, 401, 'a logged-out refresh token cannot mint new tokens');
 
     const apiSource = fileURLToPath(new URL('../src', import.meta.url));
     const missingRoutes = inventoryApiRoutes(apiSource).filter(

@@ -148,32 +148,43 @@ export class TokenService {
    */
   async refresh(refreshToken: string): Promise<IssuedTokenPair> {
     const tokenHash = this.hashToken(refreshToken);
-    return this.db.withSuperadmin(async ({ db }) => {
-      const rows = await db.select().from(authTokens).where(eq(authTokens.tokenHash, tokenHash)).limit(1);
-      const row = rows[0];
-      if (!row || row.kind !== 'refresh' || row.expiresAt.getTime() < Date.now()) {
-        throw new AppException('unauthenticated', 'Invalid or expired refresh token', HttpStatus.UNAUTHORIZED);
-      }
-
-      if (row.revokedAt) {
-        const withinGrace = Date.now() - row.revokedAt.getTime() < REFRESH_REUSE_GRACE_MS;
-        if (!withinGrace) {
-          await this.revokeAllForSubjectTx(db, row.subjectType as SubjectType, row.subjectId);
+    const theft: { subject: { subjectType: SubjectType; subjectId: string } | null } = { subject: null };
+    try {
+      return await this.db.withSuperadmin(async ({ db }) => {
+        const rows = await db.select().from(authTokens).where(eq(authTokens.tokenHash, tokenHash)).limit(1);
+        const row = rows[0];
+        if (!row || row.kind !== 'refresh' || row.expiresAt.getTime() < Date.now()) {
+          throw new AppException('unauthenticated', 'Invalid or expired refresh token', HttpStatus.UNAUTHORIZED);
         }
-        throw new AppException(
-          'unauthenticated',
-          'Refresh token already used',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
 
-      const pair = await this.issueTokenPairTx(db, row.subjectType as SubjectType, row.subjectId);
-      await db
-        .update(authTokens)
-        .set({ revokedAt: new Date(), replacedBy: pair.refreshTokenRowId })
-        .where(eq(authTokens.id, row.id));
-      return pair;
-    });
+        if (row.revokedAt) {
+          const withinGrace = Date.now() - row.revokedAt.getTime() < REFRESH_REUSE_GRACE_MS;
+          if (!withinGrace) {
+            // Do NOT revoke inside this transaction: it is about to be rolled
+            // back (we throw below), which would silently undo the very
+            // revocation meant to respond to the detected theft. Flag it and
+            // revoke afterward, in its own transaction (see finally below).
+            theft.subject = { subjectType: row.subjectType as SubjectType, subjectId: row.subjectId };
+          }
+          throw new AppException(
+            'unauthenticated',
+            'Refresh token already used',
+            HttpStatus.UNAUTHORIZED,
+          );
+        }
+
+        const pair = await this.issueTokenPairTx(db, row.subjectType as SubjectType, row.subjectId);
+        await db
+          .update(authTokens)
+          .set({ revokedAt: new Date(), replacedBy: pair.refreshTokenRowId })
+          .where(eq(authTokens.id, row.id));
+        return pair;
+      });
+    } finally {
+      if (theft.subject) {
+        await this.revokeAllForSubject(theft.subject.subjectType, theft.subject.subjectId);
+      }
+    }
   }
 
   /** Revoke every outstanding token for a subject (disable, password reset, logout-all). */

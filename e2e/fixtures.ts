@@ -110,7 +110,7 @@ export const users = [
 export type ApiRequest = { method: string; pathname: string; search: string; body?: unknown };
 
 export interface MockApiOptions {
-  role?: 'admin' | 'qa-engineer';
+  role?: 'admin' | 'qa-engineer' | 'super-admin';
   mustChangePassword?: boolean;
   onRequest?: (request: ApiRequest) => void;
   handleRequest?: (route: Route, request: ApiRequest) => boolean | Promise<boolean>;
@@ -120,9 +120,25 @@ function json(route: Route, body: unknown, status = 200): Promise<void> {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
-function me(role: 'admin' | 'qa-engineer', mustChangePassword: boolean) {
+function uidFor(role: 'admin' | 'qa-engineer' | 'super-admin'): string {
+  if (role === 'admin') return 'admin-uid';
+  if (role === 'qa-engineer') return 'qa-uid';
+  return 'super-admin-uid';
+}
+
+function me(role: 'admin' | 'qa-engineer' | 'super-admin', mustChangePassword: boolean) {
+  if (role === 'super-admin') {
+    return {
+      uid: uidFor(role),
+      role,
+      tenantId: null,
+      mustChangePassword,
+      tenant: null,
+      projects: [],
+    };
+  }
   return {
-    uid: role === 'admin' ? 'admin-uid' : 'qa-uid',
+    uid: uidFor(role),
     role,
     tenantId: ids.tenant,
     mustChangePassword,
@@ -130,11 +146,24 @@ function me(role: 'admin' | 'qa-engineer', mustChangePassword: boolean) {
   };
 }
 
+export const tenant = {
+  id: ids.tenant,
+  name: 'Acme QA',
+  slug: 'acme-qa',
+  status: 'active',
+  defaultTestFramework: 'Playwright',
+  defaultTestLanguage: 'TypeScript',
+  defaultTestType: 'ui',
+  createdAt: now,
+  updatedAt: now,
+};
+
 export async function installMockApi(page: Page, options: MockApiOptions = {}): Promise<void> {
   const role = options.role ?? 'admin';
   let mustChangePassword = options.mustChangePassword ?? false;
   let currentUsers = structuredClone(users);
   let currentGeneration = structuredClone(generation);
+  let currentTenants = structuredClone([tenant]);
 
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -154,9 +183,9 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
         {
           accessToken: 'mock-access-token',
           refreshToken: 'mock-refresh-token',
-          uid: role === 'admin' ? 'admin-uid' : 'qa-uid',
+          uid: uidFor(role),
           role,
-          tenantId: ids.tenant,
+          tenantId: role === 'super-admin' ? null : ids.tenant,
           mustChangePassword,
           expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
         },
@@ -169,9 +198,9 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
         {
           accessToken: 'mock-access-token',
           refreshToken: 'mock-refresh-token',
-          uid: role === 'admin' ? 'admin-uid' : 'qa-uid',
+          uid: uidFor(role),
           role,
-          tenantId: ids.tenant,
+          tenantId: role === 'super-admin' ? null : ids.tenant,
           mustChangePassword,
           expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
         },
@@ -265,6 +294,43 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
     if (method === 'POST' && resetMatch) {
       currentUsers = currentUsers.map((user) => user.id === resetMatch[1] ? { ...user, mustChangePassword: true } : user);
       return json(route, currentUsers.find((user) => user.id === resetMatch[1]));
+    }
+
+    if (method === 'GET' && url.pathname === '/api/v1/admin/tenants') return json(route, currentTenants);
+    if (method === 'POST' && url.pathname === '/api/v1/admin/tenants') {
+      const b = body as { name?: string; firstAdmin?: { email?: string } } | undefined;
+      const newTenant = {
+        ...tenant,
+        id: `00000000-0000-4000-8000-${String(currentTenants.length + 1).padStart(12, '0')}`,
+        name: b?.name ?? 'New tenant',
+        slug: (b?.name ?? 'new-tenant').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        status: 'active',
+      };
+      currentTenants = [...currentTenants, newTenant];
+      return json(
+        route,
+        {
+          tenant: newTenant,
+          firstAdmin: {
+            id: 'new-admin-uid',
+            tenantId: newTenant.id,
+            email: b?.firstAdmin?.email ?? 'admin@example.test',
+            role: 'admin',
+            status: 'active',
+            mustChangePassword: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        201,
+      );
+    }
+    const tenantMatch = url.pathname.match(/^\/api\/v1\/admin\/tenants\/([^/]+)$/);
+    if (method === 'PATCH' && tenantMatch) {
+      currentTenants = currentTenants.map((t) =>
+        t.id === tenantMatch[1] ? { ...t, ...(body as object) } : t,
+      );
+      return json(route, currentTenants.find((t) => t.id === tenantMatch[1]));
     }
 
     return json(route, { error: { code: 'not_mocked', message: `${method} ${url.pathname} is not mocked` } }, 501);

@@ -10,22 +10,29 @@ import { useAuth } from '../auth/AuthContext';
 export function Shell({ children }: { children: ReactNode }): JSX.Element {
   const { me, role, signOut } = useAuth();
   const isAdmin = role === 'admin';
+  const isSuperAdmin = role === 'super-admin';
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">QAssistant</div>
         <nav>
-          <NavLink to="/sessions">Recordings</NavLink>
-          <NavLink to="/projects">Project context</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
-          {isAdmin && <NavLink to="/metrics">Productivity</NavLink>}
-          {isAdmin && <NavLink to="/users">Users</NavLink>}
+          {isSuperAdmin ? (
+            <NavLink to="/tenants">Tenants</NavLink>
+          ) : (
+            <>
+              <NavLink to="/sessions">Recordings</NavLink>
+              <NavLink to="/projects">Project context</NavLink>
+              <NavLink to="/settings">Settings</NavLink>
+              {isAdmin && <NavLink to="/metrics">Productivity</NavLink>}
+              {isAdmin && <NavLink to="/users">Users</NavLink>}
+            </>
+          )}
         </nav>
         <div className="spacer" />
         <div className="who">
           {me?.tenant?.name ? <div>{me.tenant.name}</div> : null}
-          <div>{role === 'admin' ? 'Admin' : 'QA engineer'}</div>
+          <div>{isSuperAdmin ? 'Super-admin' : isAdmin ? 'Admin' : 'QA engineer'}</div>
           <div>{me?.uid}</div>
         </div>
         <button onClick={() => void signOut()}>Sign out</button>

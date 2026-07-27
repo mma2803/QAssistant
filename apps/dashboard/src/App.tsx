@@ -9,6 +9,7 @@ import { MetricsPage } from './pages/MetricsPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { UsersPage } from './pages/UsersPage';
+import { TenantsPage } from './pages/TenantsPage';
 
 /**
  * Role-scoped routing (spec 5.1). Three gates, in order:
@@ -38,6 +39,21 @@ export function App(): JSX.Element {
   if (mustChangePassword) {
     // Forced password-change screen: the only thing a flagged user can reach.
     return <PasswordChangePage />;
+  }
+
+  // Super-admin has no tenant binding, so none of the tenant-scoped routes
+  // below apply (the backend would 403 them anyway) -- it gets its own,
+  // separate route table: tenant provisioning only.
+  if (role === 'super-admin') {
+    return (
+      <Shell>
+        <Routes>
+          <Route path="/" element={<Navigate to="/tenants" replace />} />
+          <Route path="/tenants" element={<TenantsPage />} />
+          <Route path="*" element={<Navigate to="/tenants" replace />} />
+        </Routes>
+      </Shell>
+    );
   }
 
   const isAdmin = role === 'admin';

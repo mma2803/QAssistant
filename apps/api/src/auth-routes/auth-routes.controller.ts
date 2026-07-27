@@ -13,7 +13,7 @@ import {
   type LogoutRequest,
   type TokenPairResponse,
 } from '@qassistant/shared';
-import { AllowDuringPasswordChange, Public, Roles } from '../auth/decorators.js';
+import { AllowDuringPasswordChange, AllowSuperAdmin, Public, Roles } from '../auth/decorators.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { AuthRoutesService } from './auth-routes.service.js';
 
@@ -27,7 +27,11 @@ const REFRESH_COOKIE_PATH = '/api/v1/auth';
  * must_change_password gate in the AuthGuard, and @Roles('admin',
  * 'qa-engineer') at the class level keeps the super-admin token
  * (provisioning only) off these tenant routes — public routes bypass that via
- * @Public() short-circuiting the guard before role checks run.
+ * @Public() short-circuiting the guard before role checks run. GET /me is the
+ * one exception: it also carries @AllowSuperAdmin() so a super-admin
+ * dashboard session can bootstrap its own identity the same way a tenant
+ * user does (AuthRoutesService.me() already branches on ctx.isSuperAdmin()
+ * to return tenant: null, projects: [] for that role).
  *
  * The refresh token is delivered two ways: as an httpOnly/Secure/SameSite
  * cookie scoped to this path (what the dashboard relies on, since it is
@@ -93,6 +97,7 @@ export class AuthRoutesController {
 
   @Get('me')
   @AllowDuringPasswordChange()
+  @AllowSuperAdmin()
   me(): Promise<AuthMeResponse> {
     return this.authRoutesService.me();
   }

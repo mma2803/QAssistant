@@ -24,6 +24,10 @@ import type {
   TenantSettingsResponse,
   UpdateTenantSettingsRequest,
   ErrorEnvelope,
+  Tenant,
+  CreateTenantRequest,
+  CreateTenantResponse,
+  UpdateTenantRequest,
 } from '@qassistant/shared';
 import { getAccessToken } from './auth-client';
 
@@ -203,6 +207,13 @@ export const api = {
     request<TenantUser>('PATCH', `/users/${userId}`, body),
   resetPassword: (userId: string, body: ResetPasswordRequest) =>
     request<TenantUser>('POST', `/users/${userId}/reset-password`, body),
+
+  // --- tenant provisioning (4.1, super-admin only) ---
+  listTenants: () => request<Tenant[]>('GET', '/admin/tenants'),
+  createTenant: (body: CreateTenantRequest) =>
+    request<CreateTenantResponse>('POST', '/admin/tenants', body),
+  updateTenantStatus: (tenantId: string, body: UpdateTenantRequest) =>
+    request<Tenant>('PATCH', `/admin/tenants/${tenantId}`, body),
 };
 
 /** Trigger a browser download for a fetched blob. */

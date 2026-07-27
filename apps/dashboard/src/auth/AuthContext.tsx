@@ -16,7 +16,7 @@ import {
   tryRestoreSession,
 } from '../lib/auth-client';
 
-export type Role = 'admin' | 'qa-engineer';
+export type Role = 'admin' | 'qa-engineer' | 'super-admin';
 
 interface AuthState {
   loading: boolean;
@@ -86,7 +86,9 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   }, []);
 
   const value = useMemo<AuthApi>(() => {
-    const role = (state.me?.role === 'admin' || state.me?.role === 'qa-engineer'
+    const role = (state.me?.role === 'admin' ||
+    state.me?.role === 'qa-engineer' ||
+    state.me?.role === 'super-admin'
       ? state.me.role
       : null) as Role | null;
     return {

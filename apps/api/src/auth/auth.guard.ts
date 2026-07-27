@@ -14,6 +14,7 @@ import {
   IS_PUBLIC,
   ALLOW_PASSWORD_CHANGE,
   SUPER_ADMIN_ONLY,
+  ALLOW_SUPER_ADMIN,
   REQUIRED_ROLES,
 } from './decorators.js';
 import { MustChangePasswordException } from './errors.js';
@@ -94,8 +95,14 @@ export class AuthGuard implements CanActivate {
     if (superAdminOnly && role !== 'super-admin') {
       throw new ForbiddenException('Super-admin only');
     }
-    // A super-admin token must not reach tenant-scoped routes.
-    if (!superAdminOnly && role === 'super-admin') {
+    // A handful of tenant-scoped routes (e.g. GET /auth/me) also allow a
+    // super-admin token through explicitly, for the super-admin dashboard
+    // session -- everything else stays provisioning-only.
+    const allowSuperAdmin = this.reflector.getAllAndOverride<boolean>(ALLOW_SUPER_ADMIN, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!superAdminOnly && !allowSuperAdmin && role === 'super-admin') {
       throw new ForbiddenException('Super-admin may only use provisioning endpoints');
     }
 
@@ -105,7 +112,11 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
     if (requiredRoles && requiredRoles.length > 0) {
-      if (role === 'super-admin' || !requiredRoles.includes(role)) {
+      if (role === 'super-admin') {
+        if (!allowSuperAdmin) {
+          throw new ForbiddenException('Insufficient role');
+        }
+      } else if (!requiredRoles.includes(role)) {
         throw new ForbiddenException('Insufficient role');
       }
     }

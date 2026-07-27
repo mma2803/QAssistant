@@ -246,6 +246,22 @@ describe('HTTP REST surface', () => {
     await createSuperAdmin(superEmail, initialPassword);
     const superToken = await signIn(superEmail, initialPassword);
 
+    // GET /auth/me is explicitly allowlisted for super-admin (@AllowSuperAdmin
+    // on top of the tenant-only @Roles class default) so the dashboard's
+    // super-admin session can bootstrap its own identity the same way a
+    // tenant user does.
+    const superMe = await request<{
+      role: string;
+      tenantId: string | null;
+      tenant: unknown;
+      projects: unknown[];
+    }>('/api/v1/auth/me', { token: superToken });
+    assert.equal(superMe.status, 200);
+    assert.equal(superMe.body.role, 'super-admin');
+    assert.equal(superMe.body.tenantId, null);
+    assert.equal(superMe.body.tenant, null);
+    assert.deepEqual(superMe.body.projects, []);
+
     const health = await request<{ status: string; db: string }>('/health');
     assert.equal(health.status, 200, JSON.stringify(health.body));
     assert.deepEqual(health.body, { status: 'ok', db: 'up' });

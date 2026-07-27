@@ -26,9 +26,19 @@ let accessTokenExpiresAt = 0;
 const listeners = new Set<() => void>();
 
 function setSession(pair: Pick<TokenPairResponse, 'accessToken' | 'expiresAt'> | null): void {
-  accessToken = pair?.accessToken ?? null;
+  const nextToken = pair?.accessToken ?? null;
+  // Only notify on an actual state change. Without this guard, a dead session
+  // free-falls forever: a failed refresh sets the token to null and notifies
+  // -> AuthContext's onAuthChanged handler re-bootstraps -> getAccessToken()
+  // sees a null token and immediately retries the refresh -> fails again ->
+  // notifies again -> unbounded retry loop with no backoff, hammering
+  // /auth/refresh. null -> null is not a real change, so it's a no-op here.
+  const changed = nextToken !== accessToken;
+  accessToken = nextToken;
   accessTokenExpiresAt = pair ? new Date(pair.expiresAt).getTime() : 0;
-  for (const cb of listeners) cb();
+  if (changed) {
+    for (const cb of listeners) cb();
+  }
 }
 
 export function onAuthChanged(cb: () => void): () => void {

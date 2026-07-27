@@ -44,6 +44,7 @@ export interface TenantIdentity {
 /** In-memory GcsReader: serves bytes the test placed for a gcsPath. */
 export class InMemoryGcsReader implements GcsReader {
   private readonly store = new Map<string, Buffer>();
+  private readonly failing = new Set<string>();
 
   put(gcsPath: string, bytes: Buffer): void {
     this.store.set(gcsPath, bytes);
@@ -54,7 +55,21 @@ export class InMemoryGcsReader implements GcsReader {
     this.store.set(gcsPath, gzipSync(Buffer.from(JSON.stringify(events), 'utf8')));
   }
 
+  /**
+   * Simulate a hard storage failure for a path (connection refused, timeout,
+   * etc.) rather than a missing object. Mirrors S3GcsReader.download's real
+   * behavior of re-throwing any error that isn't a 404/NoSuchKey -- unlike a
+   * plain never-`put()` path, which this fake (like LocalGcsReader) resolves
+   * to `null` rather than throwing.
+   */
+  putFailing(gcsPath: string): void {
+    this.failing.add(gcsPath);
+  }
+
   async download(gcsPath: string): Promise<Buffer | null> {
+    if (this.failing.has(gcsPath)) {
+      throw new Error(`InMemoryGcsReader: simulated storage failure for ${gcsPath}`);
+    }
     return this.store.get(gcsPath) ?? null;
   }
 }

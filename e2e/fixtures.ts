@@ -114,6 +114,13 @@ export interface MockApiOptions {
   mustChangePassword?: boolean;
   onRequest?: (request: ApiRequest) => void;
   handleRequest?: (route: Route, request: ApiRequest) => boolean | Promise<boolean>;
+  /**
+   * Optionally delay a mocked response by the returned number of milliseconds
+   * before it is fulfilled. Return undefined (or a non-positive number) for
+   * requests that should resolve immediately as usual. Useful for tests that
+   * need to observe transient loading states.
+   */
+  delayMs?: (request: ApiRequest) => number | undefined;
 }
 
 function json(route: Route, body: unknown, status = 200): Promise<void> {
@@ -172,6 +179,10 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
     const body = request.postDataJSON?.();
     const apiRequest = { method, pathname: url.pathname, search: url.search, body };
     options.onRequest?.(apiRequest);
+    const delay = options.delayMs?.(apiRequest);
+    if (typeof delay === 'number' && delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
     if (await options.handleRequest?.(route, apiRequest)) return;
 
     if (method === 'GET' && url.pathname === '/api/v1/auth/me') {

@@ -11,9 +11,11 @@ npm run dev --workspace @qassistant/dashboard
 ```
 
 The dev server proxies `/api` to the backend (`VITE_API_PROXY_TARGET`, default
-`http://127.0.0.1:8080`), so the browser talks same-origin and the access
-token flows through unchanged. In prod, Caddy serves the dashboard and
-reverse-proxies the API from the same origin, so no proxy config is needed there.
+the hosted VPS `https://135-181-104-90.sslip.io`), so the browser talks
+same-origin and the access token flows through unchanged. Set
+`VITE_API_PROXY_TARGET=http://127.0.0.1:8080` to run the dev dashboard against a
+local backend. In prod, Caddy serves the dashboard and reverse-proxies the API
+from the same origin, so no proxy config is needed there.
 
 ## Structure
 

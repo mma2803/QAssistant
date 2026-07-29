@@ -59,7 +59,9 @@ npm run seed:super-admin -w @qassistant/api    # first super-admin (no UI path)
 npm run start:dev -w @qassistant/api           # API on http://127.0.0.1:8080 (/api/v1)
 
 # 4) Dashboard (new terminal; re-run the `set -a; . ./.env; set +a` line first)
-npm run dev -w @qassistant/dashboard           # http://localhost:5173, proxies /api -> :8080
+# The proxy target defaults to the hosted VPS; override it to hit the local API.
+VITE_API_PROXY_TARGET=http://127.0.0.1:8080 \
+  npm run dev -w @qassistant/dashboard         # http://localhost:5173, proxies /api -> :8080
 
 # 5) Extension (Chrome MV3)
 npm run build -w @qassistant/extension         # then chrome://extensions ->

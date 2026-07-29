@@ -29,3 +29,20 @@
 		format console
 	}
 }
+
+# Object storage (MinIO), exposed on the "storage." subdomain of SITE_ADDRESS so
+# the browser extension can PUT artifacts (screenshots, DOM chunks) directly to
+# presigned URLs. The API mints those URLs with
+# S3_PUBLIC_ENDPOINT=https://storage.$SITE_ADDRESS, so the signed host must match
+# this vhost. Caddy preserves the Host header and the full path by default, so
+# MinIO's SigV4 check (host + path + secret) still passes — do NOT rewrite/strip
+# here, or every upload 403s. A bare hostname gets automatic HTTPS; sslip.io
+# resolves any "<prefix>.135-181-104-90.sslip.io" to the VPS.
+storage.{$SITE_ADDRESS:localhost} {
+	reverse_proxy minio:9000
+
+	log {
+		output stdout
+		format console
+	}
+}

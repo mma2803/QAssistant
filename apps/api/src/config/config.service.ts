@@ -42,6 +42,13 @@ const envSchema = z.object({
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   LOCAL_UPLOAD_BASE_URL: z.string().default('http://127.0.0.1:4443'),
   S3_ENDPOINT: z.string().optional(),
+  // Browser-reachable S3 endpoint used ONLY when minting presigned upload URLs.
+  // In prod MinIO is internal (S3_ENDPOINT=http://minio:9000, unreachable from a
+  // browser), so presigned PUT URLs must carry a public host that Caddy proxies
+  // back to MinIO (e.g. https://storage.<site>). Server-side reads/deletes keep
+  // using S3_ENDPOINT (internal). Falls back to S3_ENDPOINT when unset (local dev,
+  // where MinIO is directly reachable).
+  S3_PUBLIC_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('us-east-1'),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),

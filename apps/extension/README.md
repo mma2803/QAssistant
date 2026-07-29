@@ -55,6 +55,7 @@ npm run build -w @qassistant/extension
 ```
 
 Load `apps/extension/dist` as an unpacked extension. Configure via Vite env:
-`VITE_API_BASE_URL` (the backend origin) and `VITE_DEFAULT_TENANT_SLUG`
-(prefilled at sign-in; leave unset to type it each time, or blank for
-super-admin).
+`VITE_API_BASE_URL` (the backend origin — defaults to the hosted VPS
+`https://135-181-104-90.sslip.io`; set to `http://127.0.0.1:8080` for a local
+backend) and `VITE_DEFAULT_TENANT_SLUG` (prefilled at sign-in; leave unset to
+type it each time, or blank for super-admin).

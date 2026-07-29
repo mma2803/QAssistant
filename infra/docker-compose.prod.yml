@@ -88,6 +88,11 @@ services:
     environment:
       DB_HOST: postgres
       S3_ENDPOINT: http://minio:9000
+      # Public, browser-reachable storage host for presigned upload URLs (Caddy
+      # proxies storage.<site> back to minio:9000). Derived from SITE_ADDRESS so
+      # no extra server-side config is needed. Server-side reads still use the
+      # internal S3_ENDPOINT above.
+      S3_PUBLIC_ENDPOINT: https://storage.${SITE_ADDRESS}
       # Sized to mem_limit below rather than relying on V8 auto-detecting host
       # memory (it would otherwise see the whole VPS, not this container's
       # slice of it).

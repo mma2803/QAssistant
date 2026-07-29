@@ -119,8 +119,12 @@ export class S3GcsSigner implements GcsSigner {
   private async getClient(): Promise<any> {
     if (this.client) return this.client;
     const mod: any = await import('@aws-sdk/client-s3' as string);
+    // Presign against the PUBLIC endpoint so the signed host matches what the
+    // browser will PUT to (and what MinIO validates behind Caddy). Presigning
+    // is offline (no network call here), so this only shapes the URL host.
+    // Falls back to the internal endpoint when no public one is configured.
     this.client = new mod.S3Client({
-      endpoint: this.config.S3_ENDPOINT,
+      endpoint: this.config.S3_PUBLIC_ENDPOINT ?? this.config.S3_ENDPOINT,
       region: this.config.S3_REGION,
       forcePathStyle: this.config.S3_FORCE_PATH_STYLE,
       credentials: {

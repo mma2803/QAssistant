@@ -1,15 +1,16 @@
 /**
  * Build-time + runtime configuration for the extension. Values come from Vite
- * env (import.meta.env) at build time. Defaults keep local dev working
- * against the docker-compose API with no build-time overrides.
+ * env (import.meta.env) at build time. The default targets the remote VPS
+ * deployment so an un-overridden build talks to the hosted API, not localhost.
+ * Set VITE_API_BASE_URL to point a build elsewhere (e.g. a local backend).
  */
 
 export const config = {
   tenantSlug: import.meta.env.VITE_DEFAULT_TENANT_SLUG ?? '',
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080',
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'https://135-181-104-90.sslip.io',
 } as const;
 
-/** Full REST base, e.g. "http://127.0.0.1:8080/api/v1". */
+/** Full REST base, e.g. "https://135-181-104-90.sslip.io/api/v1". */
 export function apiBase(): string {
   return `${config.apiBaseUrl.replace(/\/$/, '')}/api/v1`;
 }

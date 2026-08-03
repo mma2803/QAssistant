@@ -21,6 +21,8 @@ let stopFn: (() => void) | null = null;
 let activeSessionId: string | null = null;
 let startedAtMs = 0;
 let lastInteractedEl: Element | null = null;
+// A start deferred until DOMContentLoaded is scheduled but not yet recording.
+let pendingStart = false;
 
 function send(payload: ContentEvent): void {
   // Fire-and-forget; the SW acks but we don't block capture on it.
@@ -28,35 +30,61 @@ function send(payload: ContentEvent): void {
 }
 
 function startRecording(cmd: Extract<RecorderCommand, { type: 'recorder:start' }>): void {
-  if (stopFn) return; // already recording
+  if (stopFn || pendingStart) return; // already recording, or a start is scheduled
   activeSessionId = cmd.sessionId;
   startedAtMs = Date.parse(cmd.startedAtIso) || Date.now();
 
-  const stop = record({
-    emit(event) {
-      if (!activeSessionId) return;
-      send({ type: 'capture:events', sessionId: activeSessionId, events: [event] });
-      send({ type: 'capture:activity', sessionId: activeSessionId });
-    },
-    // Default masking (mask by default, per spec + design D27).
-    maskAllInputs: cmd.masking.maskAllInputs,
-    maskTextSelector: cmd.masking.maskTextSelector ?? undefined,
-    blockSelector: cmd.masking.blockSelector ?? undefined,
-    // Record canvas/styles conservatively; keep payloads lean for chunking.
-    recordCanvas: false,
-    collectFonts: false,
-    // Sampling: capture meaningful interactions without flooding the stream.
-    sampling: {
-      mousemove: false,
-      mouseInteraction: true,
-      scroll: 200,
-      input: 'last',
-    },
-  });
-  stopFn = stop ?? null;
+  const begin = (): void => {
+    pendingStart = false;
+    // A stop (or a newer start) may have landed while we waited for the DOM.
+    if (activeSessionId !== cmd.sessionId || stopFn) return;
+    const stop = record({
+      emit(event) {
+        if (!activeSessionId) return;
+        send({ type: 'capture:events', sessionId: activeSessionId, events: [event] });
+        send({ type: 'capture:activity', sessionId: activeSessionId });
+      },
+      // Default masking (mask by default, per spec + design D27).
+      maskAllInputs: cmd.masking.maskAllInputs,
+      maskTextSelector: cmd.masking.maskTextSelector ?? undefined,
+      blockSelector: cmd.masking.blockSelector ?? undefined,
+      // Embed web fonts and images in the snapshot so the replay is faithful:
+      // without collectFonts the replay falls back to system fonts (different
+      // metrics -> overlapping text / broken layout on MUI/Emotion apps), and
+      // without inlineImages the sandboxed replay iframe cannot re-fetch images
+      // from the app origin. Costs payload size; fidelity is the priority here
+      // (BUG-009). Canvas stays off (heavy, rarely needed).
+      recordCanvas: false,
+      collectFonts: true,
+      inlineImages: true,
+      // Sampling: capture meaningful interactions without flooding the stream.
+      sampling: {
+        mousemove: false,
+        mouseInteraction: true,
+        scroll: 200,
+        input: 'last',
+      },
+    });
+    stopFn = stop ?? null;
+  };
+
+  // Do NOT snapshot a still-loading document. The content script runs at
+  // document_start, so on every fresh page load the recorder resumes across
+  // (each full-page navigation/reload), the DOM is near-empty at this instant.
+  // rrweb would then take an EMPTY FullSnapshot as the replay baseline and the
+  // recording looks frozen/blank. Wait for the DOM to be parsed so the first
+  // snapshot captures the real, populated page. (An already-loaded page — the
+  // usual popup "Start" case — begins immediately.)
+  if (document.readyState === 'loading') {
+    pendingStart = true;
+    document.addEventListener('DOMContentLoaded', begin, { once: true });
+  } else {
+    begin();
+  }
 }
 
 function stopRecording(): void {
+  pendingStart = false; // cancel a start still waiting on DOMContentLoaded
   if (stopFn) {
     stopFn();
     stopFn = null;

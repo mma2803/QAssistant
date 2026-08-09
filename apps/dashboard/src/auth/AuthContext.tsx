@@ -18,6 +18,18 @@ import {
 
 export type Role = 'admin' | 'qa-engineer' | 'super-admin';
 
+// The signed-in email, remembered from the sign-in form so the UI can show it
+// even before the backend /auth/me returns `email` (older deployments only
+// return the opaque uid). Server-provided `me.email` always takes precedence.
+const EMAIL_KEY = 'qassistant.email';
+function rememberedEmail(): string | null {
+  try {
+    return localStorage.getItem(EMAIL_KEY);
+  } catch {
+    return null;
+  }
+}
+
 interface AuthState {
   loading: boolean;
   /** Resolved bootstrap from GET /auth/me (null until signed in + resolved). */
@@ -29,6 +41,8 @@ interface AuthState {
 
 interface AuthApi extends AuthState {
   role: Role | null;
+  /** Display email: server-provided when available, else the remembered sign-in email. */
+  email: string | null;
   signIn: (email: string, password: string, tenantSlug?: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Set a new password and clear the forced-change marker, then re-bootstrap. */
@@ -94,11 +108,22 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     return {
       ...state,
       role,
+      email: state.me?.email ?? rememberedEmail() ?? state.me?.uid ?? null,
       signIn: async (email, password, tenantSlug) => {
+        try {
+          localStorage.setItem(EMAIL_KEY, email);
+        } catch {
+          /* storage unavailable — display falls back to uid */
+        }
         await clientSignIn(email, password, tenantSlug);
         await bootstrap();
       },
       signOut: async () => {
+        try {
+          localStorage.removeItem(EMAIL_KEY);
+        } catch {
+          /* ignore */
+        }
         await clientSignOut();
         setState({ loading: false, me: null, mustChangePassword: false, signedIn: false });
       },

@@ -10,7 +10,7 @@ import type {
   RankingResponse,
   UserMetric,
 } from '@qassistant/shared';
-import type { IntegrationStatus } from '@qassistant/shared/enums';
+import type { IntegrationStatus, TestType } from '@qassistant/shared/enums';
 import { RequestContext } from '../auth/request-context.js';
 import { AppException } from '../auth/errors.js';
 import {
@@ -118,6 +118,14 @@ export class DashboardService {
           WHERE gt.session_id = ${sessions.id}
             AND gt.kind = 'playwright_test'
         )`,
+        // Distinct test types among the session's playwright generations, so the
+        // records list can badge UI / back-end without an N+1 lookup.
+        testTypes: sql<TestType[]>`(
+          SELECT COALESCE(ARRAY_AGG(DISTINCT gt.test_type ORDER BY gt.test_type), ARRAY[]::text[])
+          FROM ${generatedTests} gt
+          WHERE gt.session_id = ${sessions.id}
+            AND gt.kind = 'playwright_test'
+        )`,
         // Derived integration status of the session's candidate version:
         // ready_to_integrate wins; otherwise the most recent integrated/failed
         // outcome; NULL when no version is a candidate yet (rendered as "—").
@@ -148,6 +156,7 @@ export class DashboardService {
       recordedByEmail: r.recordedByEmail ?? null,
       durationSeconds: durationSeconds(r.session.startedAt, r.session.endedAt),
       generatedTestCount: r.generatedTestCount ?? 0,
+      testTypes: r.testTypes ?? [],
       integrationStatus: r.integrationStatus ?? null,
     }));
 

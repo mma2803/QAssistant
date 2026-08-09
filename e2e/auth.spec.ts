@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { authenticate, installMockApi } from './fixtures';
+import { authenticate, installMockApi, signOut } from './fixtures';
 
 /**
  * The dashboard dev server used by this suite always runs with
@@ -29,14 +29,14 @@ test('signs in and signs out through the dashboard shell', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await page.getByLabel('Email').fill('admin@example.test');
   await page.getByLabel('Password').fill('temporary-password');
-  await page.getByLabel('Tenant (leave blank for super-admin)').fill('tenant-acme');
+  await page.getByLabel('Tenant').fill('tenant-acme');
   await page.getByRole('button', { name: 'Sign in' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Welcome back 👋' })).toBeVisible();
   await expect(page.getByText('Acme QA')).toBeVisible();
   expect(requests).toContain('GET /api/v1/auth/me');
 
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signOut(page);
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 
@@ -99,7 +99,7 @@ test('login failure shows an error banner', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await page.getByLabel('Email').fill('admin@example.test');
   await page.getByLabel('Password').fill('wrong-password');
-  await page.getByLabel('Tenant (leave blank for super-admin)').fill('tenant-acme');
+  await page.getByLabel('Tenant').fill('tenant-acme');
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   await expect(page.getByText('Invalid credentials')).toBeVisible();
@@ -130,9 +130,9 @@ test('a dead session on reload bounces the user back to the sign-in screen', asy
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   await page.getByLabel('Email').fill('admin@example.test');
   await page.getByLabel('Password').fill('temporary-password');
-  await page.getByLabel('Tenant (leave blank for super-admin)').fill('tenant-acme');
+  await page.getByLabel('Tenant').fill('tenant-acme');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Welcome back 👋' })).toBeVisible();
 
   await page.evaluate(() => window.localStorage.removeItem('qassistant:e2e-authenticated'));
   await page.reload();

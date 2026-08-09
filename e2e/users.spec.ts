@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { authenticate, ids, installMockApi } from './fixtures';
+import { authenticate, chooseOption, ids, installMockApi } from './fixtures';
 
 test('creates, changes, disables, and resets a tenant user', async ({ page }) => {
   const requests: Array<{ method: string; pathname: string; body?: unknown }> = [];
@@ -8,20 +8,25 @@ test('creates, changes, disables, and resets a tenant user', async ({ page }) =>
   await page.goto('/users');
 
   await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add user' }).click();
   await page.getByLabel('Email').fill('new.qa@example.test');
   await page.getByLabel('Initial password').fill('temporary-password');
-  await page.getByLabel('Role').selectOption('admin');
+  await chooseOption(page, 'Role', 'Admin');
   await page.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByRole('cell', { name: 'new.qa@example.test' })).toBeVisible();
 
   const qaRow = page.getByRole('row').filter({
     has: page.getByRole('cell', { name: 'qa@example.test', exact: true }),
   });
-  await qaRow.getByRole('combobox').selectOption('admin');
-  await qaRow.getByRole('button', { name: 'Disable' }).click();
+  await qaRow.getByRole('combobox').click();
+  await page.getByRole('option', { name: 'admin' }).click();
+
+  await qaRow.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Disable' }).click();
 
   page.once('dialog', (dialog) => dialog.accept('replacement-password'));
-  await qaRow.getByRole('button', { name: 'Reset password' }).click();
+  await qaRow.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Reset password' }).click();
 
   expect(requests).toContainEqual(expect.objectContaining({
     method: 'POST',

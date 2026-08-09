@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { authenticate, ids, installMockApi } from './fixtures';
+import { authenticate, chooseOption, ids, installMockApi } from './fixtures';
 
 test('reviews a recording and exercises the code-generation workflow', async ({ page }) => {
   const requests: Array<{ method: string; pathname: string; body?: unknown }> = [];
@@ -22,7 +22,7 @@ test('reviews a recording and exercises the code-generation workflow', async ({ 
   await expect(page.getByText('Ready to integrate', { exact: true })).toBeVisible();
 
   await page.getByLabel('Comment to steer the next generation').fill('Use the visible receipt number.');
-  await page.getByLabel('Target version (optional)').selectOption(ids.generation);
+  await chooseOption(page, 'Target version', 'v1');
   await page.getByRole('button', { name: 'Add comment' }).click();
   await expect(page.getByLabel('Comment to steer the next generation')).toHaveValue('');
 

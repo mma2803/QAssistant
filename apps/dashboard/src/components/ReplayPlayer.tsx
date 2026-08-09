@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { Maximize2, Pause, Play } from 'lucide-react';
 // rrweb's own replay stylesheet (cursor + iframe reset). Required for the replay
 // to render correctly.
 import 'rrweb/dist/style.css';
+
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+const HOST_CLASS = 'min-h-90 overflow-hidden rounded-lg border bg-white';
 
 /**
  * rrweb DOM-replay player (spec 5.2 "rrweb-player replay of DOM-replay").
@@ -163,10 +169,10 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
 
   if (!events || events.length === 0) {
     return (
-      <div className="replay-host" style={{ display: 'grid', placeItems: 'center', color: '#666' }}>
-        <div style={{ textAlign: 'center', padding: 16 }}>
-          <div>DOM-replay is captured for this recording.</div>
-          <div className="muted" style={{ marginTop: 6 }}>
+      <div className={cn(HOST_CLASS, 'grid place-items-center')}>
+        <div className="text-muted-foreground p-4 text-center text-sm">
+          <div className="text-foreground">DOM-replay is captured for this recording.</div>
+          <div className="mt-1.5">
             Use Export to download the replayable DOM chunks and screenshots.
           </div>
         </div>
@@ -175,19 +181,16 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
   }
 
   if (error) {
-    return <div className="replay-host error" style={{ padding: 16 }}>{error}</div>;
+    return <div className={cn(HOST_CLASS, 'text-destructive p-4 text-sm')}>{error}</div>;
   }
 
   return (
-    <div className="replay-host" ref={hostRef} style={{ background: '#fff' }}>
-      <div ref={stageRef} style={{ overflow: 'hidden', background: '#fff' }} />
-      <div
-        className="row"
-        style={{ alignItems: 'center', gap: 10, padding: '8px 4px', borderTop: '1px solid var(--border)' }}
-      >
-        <button onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} style={{ minWidth: 40 }}>
-          {playing ? '⏸' : '▶'}
-        </button>
+    <div className={HOST_CLASS} ref={hostRef}>
+      <div ref={stageRef} className="overflow-hidden bg-white" />
+      <div className="bg-card flex items-center gap-3 border-t px-3 py-2">
+        <Button variant="ghost" size="icon" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
+          {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+        </Button>
         <input
           type="range"
           min={0}
@@ -195,31 +198,29 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
           step={100}
           value={Math.min(current, total || 0)}
           onChange={(e) => seek(Number(e.target.value))}
-          style={{ flex: 1 }}
+          className="accent-primary flex-1"
           aria-label="Seek"
         />
-        <span className="muted" style={{ fontSize: 12, minWidth: 84, textAlign: 'right' }}>
+        <span className="text-muted-foreground min-w-20 text-right text-xs tabular-nums">
           {fmt(current)} / {fmt(total)}
         </span>
-        <div className="row" style={{ gap: 4 }}>
+        <div className="flex items-center gap-1">
           {SPEEDS.map((s) => (
-            <button
+            <Button
               key={s}
+              variant={speed === s ? 'default' : 'ghost'}
+              size="sm"
+              className="min-w-9 px-2"
               onClick={() => changeSpeed(s)}
               aria-pressed={speed === s}
-              style={{
-                minWidth: 34,
-                fontWeight: speed === s ? 700 : 400,
-                opacity: speed === s ? 1 : 0.6,
-              }}
             >
               {s}×
-            </button>
+            </Button>
           ))}
         </div>
-        <button onClick={fullscreen} aria-label="Fullscreen" title="Fullscreen">
-          ⛶
-        </button>
+        <Button variant="ghost" size="icon" onClick={fullscreen} aria-label="Fullscreen" title="Fullscreen">
+          <Maximize2 className="size-4" />
+        </Button>
       </div>
     </div>
   );

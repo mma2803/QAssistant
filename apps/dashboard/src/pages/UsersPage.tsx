@@ -1,8 +1,47 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { MoreHorizontal, Plus, Search } from 'lucide-react';
 import type { Role, TenantUser } from '@qassistant/shared';
-import { api } from '../lib/api';
-import { useAsync } from '../lib/useAsync';
-import { formatDateTime } from '../lib/format';
+
+import { api } from '@/lib/api';
+import { useAsync } from '@/lib/useAsync';
+import { formatDateTime } from '@/lib/format';
+import { PageHeader } from '@/components/PageHeader';
+import { StatusBadge } from '@/components/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+
+const ALL = '__all__';
 
 /**
  * Admin user-management UI (spec 5.5), backed by the Admin SDK endpoints
@@ -15,10 +54,23 @@ export function UsersPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // create form
+  // filters
+  const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<Role | ''>('');
+
+  // create form (modal)
+  const [createOpen, setCreateOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('qa-engineer');
+
+  const rows = useMemo(() => {
+    const list = users.data ?? [];
+    const q = query.trim().toLowerCase();
+    return list.filter(
+      (u) => (!roleFilter || u.role === roleFilter) && (!q || u.email.toLowerCase().includes(q)),
+    );
+  }, [users.data, query, roleFilter]);
 
   async function guard(fn: () => Promise<unknown>): Promise<void> {
     setError(null);
@@ -39,6 +91,7 @@ export function UsersPage(): JSX.Element {
       setEmail('');
       setPassword('');
       setRole('qa-engineer');
+      setCreateOpen(false);
     });
   }
 
@@ -60,92 +113,173 @@ export function UsersPage(): JSX.Element {
   }
 
   return (
-    <div className="col">
-      <h1 style={{ margin: 0 }}>Users</h1>
-      {error && <div className="error">{error}</div>}
+    <div className="space-y-6">
+      <PageHeader
+        title="Users"
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" />
+            Add user
+          </Button>
+        }
+      />
+      {error && <p className="text-destructive text-sm">{error}</p>}
 
-      <div className="card col">
-        <h3 style={{ margin: 0 }}>Add user</h3>
-        <div className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <label className="col" style={{ gap: 4, minWidth: 220 }}>
-            <span className="muted">Email</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <label className="col" style={{ gap: 4, minWidth: 200 }}>
-            <span className="muted">Initial password</span>
-            <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </label>
-          <label className="col" style={{ gap: 4, minWidth: 160 }}>
-            <span className="muted">Role</span>
-            <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="qa-engineer">QA engineer</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
-          <button
-            className="primary"
-            disabled={busy || !email || password.length < 8}
-            onClick={() => void onCreate()}
+      <Card>
+        <CardContent className="flex flex-wrap items-end gap-3">
+          <div className="relative min-w-56 flex-1">
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+            <Input
+              placeholder="Search by email…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select
+            value={roleFilter || ALL}
+            onValueChange={(v) => setRoleFilter(v === ALL ? '' : (v as Role))}
           >
-            Create
-          </button>
-        </div>
-        <div className="muted" style={{ fontSize: 12 }}>
-          The new user must change this password on first sign-in.
-        </div>
-      </div>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="All roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All roles</SelectItem>
+              <SelectItem value="qa-engineer">QA engineer</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        {users.loading && <div className="muted">Loading users...</div>}
-        {users.data && (
-          <table>
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Must change pw</th>
-                <th>Created</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.data.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.email}</td>
-                  <td>
-                    <select
-                      value={u.role}
-                      disabled={busy}
-                      onChange={(e) => void onChangeRole(u, e.target.value as Role)}
-                    >
-                      <option value="qa-engineer">qa-engineer</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </td>
-                  <td>
-                    <span className={`badge ${u.status === 'active' ? 'active' : ''}`}>
-                      {u.status}
-                    </span>
-                  </td>
-                  <td className="muted">{u.mustChangePassword ? 'yes' : 'no'}</td>
-                  <td className="muted">{formatDateTime(u.createdAt)}</td>
-                  <td>
-                    <div className="row">
-                      <button disabled={busy} onClick={() => void onReset(u)}>
-                        Reset password
-                      </button>
-                      <button disabled={busy} onClick={() => void onToggleStatus(u)}>
-                        {u.status === 'active' ? 'Disable' : 'Enable'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <Card className="py-0">
+        <CardContent className="px-0">
+          {users.loading && <p className="text-muted-foreground p-6 text-sm">Loading users…</p>}
+          {users.data && rows.length === 0 && (
+            <p className="text-muted-foreground p-6 text-sm">No users match your filters.</p>
+          )}
+          {users.data && rows.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Must change pw</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-12 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell className="font-medium">{u.email}</TableCell>
+                    <TableCell>
+                      <Select
+                        value={u.role}
+                        disabled={busy}
+                        onValueChange={(v) => void onChangeRole(u, v as Role)}
+                      >
+                        <SelectTrigger size="sm" className="w-36">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="qa-engineer">qa-engineer</SelectItem>
+                          <SelectItem value="admin">admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={u.status} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {u.mustChangePassword ? 'yes' : 'no'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(u.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" disabled={busy} aria-label="Actions">
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => void onReset(u)}>
+                            Reset password
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant={u.status === 'active' ? 'destructive' : 'default'}
+                            onSelect={() => void onToggleStatus(u)}
+                          >
+                            {u.status === 'active' ? 'Disable' : 'Enable'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add user modal */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add user</DialogTitle>
+            <DialogDescription>
+              The new user must change this password on first sign-in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="u-email">Email</Label>
+              <Input
+                id="u-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="u-pw">Initial password</Label>
+              <Input
+                id="u-pw"
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+                <SelectTrigger className="w-full" aria-label="Role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="qa-engineer">QA engineer</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={busy || !email || password.length < 8}
+              onClick={() => void onCreate()}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

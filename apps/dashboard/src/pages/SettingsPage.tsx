@@ -1,8 +1,23 @@
 import { useEffect, useState } from 'react';
 import type { TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
-import { api } from '../lib/api';
-import { useAsync } from '../lib/useAsync';
+
+import { api } from '@/lib/api';
+import { useAsync } from '@/lib/useAsync';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const CUSTOM = 'custom';
 
 /**
  * Tenant settings (change: configurable-test-framework). The tenant-wide default
@@ -15,18 +30,12 @@ export function SettingsPage(): JSX.Element {
   const settings = useAsync(() => api.getTenantSettings(), []);
   const [framework, setFramework] = useState('');
   const [language, setLanguage] = useState('');
-  // Whether the user explicitly picked "Custom". Kept as state (not derived from
-  // the values) so selecting Custom sticks even when the current values still
-  // happen to match a preset — otherwise the dropdown snaps back to the preset.
   const [customMode, setCustomMode] = useState(false);
-  // Tenant-wide default test type (change: configurable-test-type).
   const [testType, setTestType] = useState<TestType>('ui');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Seed the form from the loaded default once it arrives. If that default
-  // doesn't match any preset, start in Custom mode so the fields are editable.
   useEffect(() => {
     if (settings.data) {
       setFramework(settings.data.defaultTestFramework);
@@ -44,13 +53,12 @@ export function SettingsPage(): JSX.Element {
   const presetIndex = TEST_FRAMEWORK_PRESETS.findIndex(
     (p) => p.framework === framework && p.language === language,
   );
-  // Show "Custom" when explicitly chosen OR when the values match no preset.
-  const choice = customMode || presetIndex < 0 ? 'custom' : String(presetIndex);
+  const choice = customMode || presetIndex < 0 ? CUSTOM : String(presetIndex);
 
   function onChoose(value: string): void {
     setSaved(false);
-    if (value === 'custom') {
-      setCustomMode(true); // reveal the free-form fields and keep them
+    if (value === CUSTOM) {
+      setCustomMode(true);
       return;
     }
     setCustomMode(false);
@@ -83,84 +91,97 @@ export function SettingsPage(): JSX.Element {
     }
   }
 
-  if (settings.loading) return <div className="muted">Loading settings...</div>;
-  if (settings.error) return <div className="error">{settings.error}</div>;
+  if (settings.loading) return <p className="text-muted-foreground text-sm">Loading settings…</p>;
+  if (settings.error) return <p className="text-destructive text-sm">{settings.error}</p>;
 
   const canSave = framework.trim().length > 0 && language.trim().length > 0;
 
   return (
-    <div className="col">
-      <h1 style={{ margin: 0 }}>Settings</h1>
+    <div className="space-y-6">
+      <PageHeader title="Settings" />
 
-      <div className="card col" style={{ gap: 12, maxWidth: 520 }}>
-        <h3 style={{ margin: 0 }}>Default test framework</h3>
-        <p className="muted" style={{ margin: 0 }}>
-          The default used when generating a test, unless overridden per generation.
-          Any team member can change it; it applies tenant-wide.
-        </p>
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Default test framework</CardTitle>
+          <CardDescription>
+            Used when generating a test, unless overridden per generation. Any team member can
+            change it; it applies tenant-wide.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && <p className="text-destructive text-sm">{error}</p>}
 
-        {error && <div className="error">{error}</div>}
-
-        <label className="col" style={{ gap: 4 }}>
-          <span className="muted">Framework / language</span>
-          <select value={choice} onChange={(e) => onChoose(e.target.value)}>
-            {TEST_FRAMEWORK_PRESETS.map((p, i) => (
-              <option key={`${p.framework}-${p.language}`} value={String(i)}>
-                {p.framework} / {p.language}
-              </option>
-            ))}
-            <option value="custom">Custom…</option>
-          </select>
-        </label>
-
-        {choice === 'custom' && (
-          <div className="row" style={{ gap: 8 }}>
-            <label className="col" style={{ gap: 4 }}>
-              <span className="muted">Framework</span>
-              <input
-                value={framework}
-                onChange={(e) => {
-                  setFramework(e.target.value);
-                  setSaved(false);
-                }}
-                placeholder="e.g. WebdriverIO"
-              />
-            </label>
-            <label className="col" style={{ gap: 4 }}>
-              <span className="muted">Language</span>
-              <input
-                value={language}
-                onChange={(e) => {
-                  setLanguage(e.target.value);
-                  setSaved(false);
-                }}
-                placeholder="e.g. JavaScript"
-              />
-            </label>
+          <div className="space-y-2">
+            <Label>Framework / language</Label>
+            <Select value={choice} onValueChange={onChoose}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TEST_FRAMEWORK_PRESETS.map((p, i) => (
+                  <SelectItem key={`${p.framework}-${p.language}`} value={String(i)}>
+                    {p.framework} / {p.language}
+                  </SelectItem>
+                ))}
+                <SelectItem value={CUSTOM}>Custom…</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
 
-        <label className="col" style={{ gap: 4 }}>
-          <span className="muted">Default test type</span>
-          <select
-            value={testType}
-            onChange={(e) => {
-              setTestType(e.target.value as TestType);
-              setSaved(false);
-            }}
-          >
-            <option value="ui">UI test (from the recorded DOM flow)</option>
-            <option value="backend">Back-end test (from captured API traffic)</option>
-          </select>
-        </label>
+          {choice === CUSTOM && (
+            <div className="flex flex-wrap gap-3">
+              <div className="flex-1 space-y-2">
+                <Label>Framework</Label>
+                <Input
+                  value={framework}
+                  onChange={(e) => {
+                    setFramework(e.target.value);
+                    setSaved(false);
+                  }}
+                  placeholder="e.g. WebdriverIO"
+                />
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label>Language</Label>
+                <Input
+                  value={language}
+                  onChange={(e) => {
+                    setLanguage(e.target.value);
+                    setSaved(false);
+                  }}
+                  placeholder="e.g. JavaScript"
+                />
+              </div>
+            </div>
+          )}
 
-        <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-          <button className="primary" disabled={busy || !canSave} onClick={() => void onSave()}>
-            {busy ? 'Saving...' : 'Save default'}
-          </button>
-          {saved && <span className="muted">Saved ✓</span>}
-        </div>
-      </div>
+          <div className="space-y-2">
+            <Label>Default test type</Label>
+            <Select
+              value={testType}
+              onValueChange={(v) => {
+                setTestType(v as TestType);
+                setSaved(false);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ui">UI test (from the recorded DOM flow)</SelectItem>
+                <SelectItem value="backend">Back-end test (from captured API traffic)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button disabled={busy || !canSave} onClick={() => void onSave()}>
+              {busy ? 'Saving…' : 'Save default'}
+            </Button>
+            {saved && <span className="text-muted-foreground text-sm">Saved ✓</span>}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

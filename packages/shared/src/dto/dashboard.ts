@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { uuid, isoTimestamp, paginationQuerySchema, paginated } from '../common.js';
-import { SESSION_STATUSES, INTEGRATION_STATUSES } from '../enums.js';
+import { SESSION_STATUSES, INTEGRATION_STATUSES, TEST_TYPES } from '../enums.js';
 import {
   sessionSchema,
   artifactSchema,
@@ -37,6 +37,9 @@ export const dashboardSessionListItemSchema = sessionSchema.extend({
   recordedByEmail: z.string().email().nullable(),
   durationSeconds: z.number().nonnegative().nullable(),
   generatedTestCount: z.number().int().nonnegative(),
+  // Distinct test types among the session's generated tests (a session can have
+  // both a UI and a back-end generation). Empty when nothing is generated yet.
+  testTypes: z.array(z.enum(TEST_TYPES)),
   // Derived integration status of the session's candidate version (the approved
   // `ready_to_integrate` version, or the latest integrated/failed one). `null`
   // means no version is a candidate yet (rendered as "—" in the records list).

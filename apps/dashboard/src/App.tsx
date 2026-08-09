@@ -3,6 +3,7 @@ import { useAuth } from './auth/AuthContext';
 import { Shell } from './components/Shell';
 import { LoginPage } from './pages/LoginPage';
 import { PasswordChangePage } from './pages/PasswordChangePage';
+import { OverviewPage } from './pages/OverviewPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
 import { MetricsPage } from './pages/MetricsPage';
@@ -26,8 +27,8 @@ export function App(): JSX.Element {
 
   if (loading) {
     return (
-      <div className="center-screen">
-        <div className="muted">Loading...</div>
+      <div className="text-muted-foreground grid min-h-screen place-items-center text-sm">
+        Loading…
       </div>
     );
   }
@@ -61,14 +62,15 @@ export function App(): JSX.Element {
   return (
     <Shell>
       <Routes>
-        <Route path="/" element={<Navigate to="/sessions" replace />} />
+        <Route path="/" element={<Navigate to="/overview" replace />} />
+        <Route path="/overview" element={<OverviewPage />} />
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         {isAdmin && <Route path="/metrics" element={<MetricsPage />} />}
         {isAdmin && <Route path="/users" element={<UsersPage />} />}
-        <Route path="*" element={<Navigate to="/sessions" replace />} />
+        <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>
     </Shell>
   );

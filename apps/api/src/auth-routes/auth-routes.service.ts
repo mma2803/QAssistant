@@ -122,16 +122,22 @@ export class AuthRoutesService {
 
   /** GET /auth/me: resolved identity + tenant/active-projects bootstrap. */
   async me(): Promise<AuthMeResponse> {
-    const base = {
-      uid: this.ctx.uid,
-      role: this.ctx.role,
-      tenantId: this.ctx.tenantId,
-      mustChangePassword: this.ctx.mustChangePassword,
-    } as const;
-
     // Super-admin: project-level, no tenant binding (D10). No bootstrap data.
     if (this.ctx.isSuperAdmin() || !this.ctx.tenantId) {
-      return { ...base, tenant: null, projects: [] };
+      const superRows = await this.ctx.dbTx
+        .select({ email: superAdmins.email })
+        .from(superAdmins)
+        .where(eq(superAdmins.id, this.ctx.uid))
+        .limit(1);
+      return {
+        uid: this.ctx.uid,
+        email: superRows[0]?.email ?? null,
+        role: this.ctx.role,
+        tenantId: this.ctx.tenantId,
+        mustChangePassword: this.ctx.mustChangePassword,
+        tenant: null,
+        projects: [],
+      };
     }
 
     const tenantId = this.ctx.tenantId;
@@ -150,8 +156,18 @@ export class AuthRoutesService {
       .from(projects)
       .where(and(eq(projects.tenantId, tenantId), eq(projects.status, 'active')));
 
+    const userRows = await this.ctx.dbTx
+      .select({ email: tenantUsers.email })
+      .from(tenantUsers)
+      .where(eq(tenantUsers.id, this.ctx.uid))
+      .limit(1);
+
     return {
-      ...base,
+      uid: this.ctx.uid,
+      email: userRows[0]?.email ?? null,
+      role: this.ctx.role,
+      tenantId: this.ctx.tenantId,
+      mustChangePassword: this.ctx.mustChangePassword,
       tenant: tenantRows[0] ? toTenant(tenantRows[0]) : null,
       projects: projectRows.map(toProject),
     };

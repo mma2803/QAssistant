@@ -54,6 +54,8 @@ export type CompletePasswordChangeRequest = z.infer<typeof completePasswordChang
 /** GET /auth/me response: resolved identity + tenant/projects bootstrap. */
 export const authMeResponseSchema = z.object({
   uid: z.string(),
+  /** The signed-in account's email, for display (uid is an opaque internal id). */
+  email: z.string().email().nullable(),
   role: z.enum(TOKEN_ROLES),
   tenantId: uuid.nullable(),
   mustChangePassword: z.boolean(),

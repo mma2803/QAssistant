@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { authenticate, ids, installMockApi, projects, session } from './fixtures';
+import { authenticate, chooseOption, ids, installMockApi, projects, session } from './fixtures';
 
 test('unauthenticated deep links remain behind the login gate', async ({ page }) => {
   await installMockApi(page);
@@ -16,19 +16,19 @@ test('cancelling forced password change signs the user out', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 
-test('unknown authenticated routes redirect to recordings', async ({ page }) => {
+test('unknown authenticated routes redirect to the overview', async ({ page }) => {
   await authenticate(page);
   await installMockApi(page);
   await page.goto('/not-a-route');
-  await expect(page).toHaveURL(/\/sessions$/);
-  await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByRole('heading', { name: 'Welcome back 👋' })).toBeVisible();
 });
 
 test('admin shell exposes all role-scoped navigation links', async ({ page }) => {
   await authenticate(page);
   await installMockApi(page);
   await page.goto('/sessions');
-  for (const link of ['Recordings', 'Project context', 'Productivity', 'Users']) {
+  for (const link of ['Overview', 'Recordings', 'Project context', 'Productivity', 'Users']) {
     await expect(page.getByRole('link', { name: link })).toBeVisible();
   }
 });
@@ -45,7 +45,7 @@ test('recordings page renders an empty state', async ({ page }) => {
     },
   });
   await page.goto('/sessions');
-  await expect(page.getByText('No recordings yet.')).toBeVisible();
+  await expect(page.getByText('No recordings found.')).toBeVisible();
 });
 
 test('recordings page surfaces API errors', async ({ page }) => {
@@ -67,7 +67,7 @@ test('recordings page displays pagination availability', async ({ page }) => {
   await authenticate(page);
   await installMockApi(page);
   await page.goto('/sessions');
-  await expect(page.getByText('More results available')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load more' })).toBeVisible();
 });
 
 test('cancelling recording deletion sends no DELETE request', async ({ page }) => {
@@ -76,7 +76,8 @@ test('cancelling recording deletion sends no DELETE request', async ({ page }) =
   await installMockApi(page, { onRequest: ({ method, pathname }) => method === 'DELETE' && deletes.push(pathname) });
   await page.goto('/sessions');
   page.once('dialog', (dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
   expect(deletes).toEqual([]);
 });
 
@@ -92,7 +93,7 @@ test('project context renders no-project state', async ({ page }) => {
     },
   });
   await page.goto('/projects');
-  await expect(page.getByText('No active projects.')).toBeVisible();
+  await expect(page.getByText('No active projects yet.')).toBeVisible();
 });
 
 test('project context surfaces project loading errors', async ({ page }) => {
@@ -110,21 +111,19 @@ test('project context surfaces project loading errors', async ({ page }) => {
   await expect(page.getByText('Project load failed')).toBeVisible();
 });
 
-test('metrics page independently surfaces both endpoint failures', async ({ page }) => {
+test('productivity page surfaces a data load failure', async ({ page }) => {
   await authenticate(page);
   await installMockApi(page, {
     handleRequest: async (route, request) => {
-      if (request.pathname === '/api/v1/dashboard/metrics' || request.pathname === '/api/v1/dashboard/ranking') {
-        const message = request.pathname.endsWith('metrics') ? 'Metrics failed' : 'Ranking failed';
-        await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'unknown', message } }) });
+      if (request.pathname === '/api/v1/dashboard/sessions') {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'unknown', message: 'Metrics data failed' } }) });
         return true;
       }
       return false;
     },
   });
   await page.goto('/metrics');
-  await expect(page.getByText('Metrics failed')).toBeVisible();
-  await expect(page.getByText('Ranking failed')).toBeVisible();
+  await expect(page.getByText('Metrics data failed')).toBeVisible();
 });
 
 test('recording detail surfaces a not-found response', async ({ page }) => {
@@ -191,6 +190,7 @@ test('user creation stays disabled until inputs are valid', async ({ page }) => 
   await authenticate(page);
   await installMockApi(page);
   await page.goto('/users');
+  await page.getByRole('button', { name: 'Add user' }).click();
   const create = page.getByRole('button', { name: 'Create' });
   await expect(create).toBeDisabled();
   await page.getByLabel('Email').fill('new@example.test');
@@ -212,6 +212,7 @@ test('user creation surfaces backend conflicts', async ({ page }) => {
     },
   });
   await page.goto('/users');
+  await page.getByRole('button', { name: 'Add user' }).click();
   await page.getByLabel('Email').fill('qa@example.test');
   await page.getByLabel('Initial password').fill('long-enough-password');
   await page.getByRole('button', { name: 'Create' }).click();
@@ -230,7 +231,8 @@ test('disabled users expose an Enable action', async ({ page }) => {
     },
   });
   await page.goto('/users');
-  await expect(page.getByRole('button', { name: 'Enable' })).toBeVisible();
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Enable' })).toBeVisible();
 });
 
 test('navigation links switch dashboard screens without reload', async ({ page }) => {
@@ -247,9 +249,9 @@ test('project selection changes displayed base URL and screenshot default', asyn
   await authenticate(page);
   await installMockApi(page);
   await page.goto('/projects');
-  await page.getByLabel('Project').selectOption(ids.project2);
+  await chooseOption(page, 'Project', 'Billing');
   await expect(page.getByText(projects[1]!.baseUrl)).toBeVisible();
-  await expect(page.getByText('off', { exact: true })).toBeVisible();
+  await expect(page.getByText('Off', { exact: true })).toBeVisible();
 });
 
 test('recordings omit empty filters from the initial request', async ({ page }) => {
@@ -270,16 +272,16 @@ test('qa engineers are redirected away from the productivity deep link', async (
   await authenticate(page);
   await installMockApi(page, { role: 'qa-engineer' });
   await page.goto('/metrics');
-  await expect(page).toHaveURL(/\/sessions$/);
-  await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByRole('heading', { name: 'Welcome back 👋' })).toBeVisible();
 });
 
 test('qa engineers are redirected away from the users deep link', async ({ page }) => {
   await authenticate(page);
   await installMockApi(page, { role: 'qa-engineer' });
   await page.goto('/users');
-  await expect(page).toHaveURL(/\/sessions$/);
-  await expect(page.getByText('Showing only the recordings you captured.')).toBeVisible();
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByRole('heading', { name: 'Welcome back 👋' })).toBeVisible();
 });
 
 test('recording detail surfaces replay loading failures independently', async ({ page }) => {
@@ -308,6 +310,7 @@ test('cancelling a password reset sends no reset request', async ({ page }) => {
   });
   await page.goto('/users');
   page.once('dialog', (dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: 'Reset password' }).click();
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Reset password' }).click();
   await expect.poll(() => resets.length).toBe(0);
 });

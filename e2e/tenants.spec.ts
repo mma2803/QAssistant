@@ -16,6 +16,7 @@ test('super-admin manages tenants: list, create, and toggle status', async ({ pa
   await expect(page.getByRole('link', { name: 'Recordings' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Users' })).toHaveCount(0);
 
+  await page.getByRole('button', { name: 'Add tenant' }).click();
   await page.getByLabel('Tenant name').fill('Globex Corp');
   await page.getByLabel('First admin email').fill('owner@globex.test');
   await page.getByLabel('First admin initial password').fill('temporary-password');
@@ -34,7 +35,8 @@ test('super-admin manages tenants: list, create, and toggle status', async ({ pa
   );
 
   const acmeRow = page.getByRole('row', { name: /Acme QA/ });
-  await acmeRow.getByRole('button', { name: 'Deactivate' }).click();
+  await acmeRow.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Deactivate' }).click();
   await expect(acmeRow.getByText('inactive', { exact: true })).toBeVisible();
   expect(requests).toContainEqual(
     expect.objectContaining({

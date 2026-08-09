@@ -15,7 +15,10 @@ export const ids = {
   job: '00000000-0000-4000-8000-000000000012',
 };
 
-const now = '2026-06-14T10:00:00.000Z';
+const now = new Date().toISOString();
+// Recent so the Productivity time-window (which defaults to the last 7 days and
+// is computed client-side against the real clock) includes the fixture session.
+const recent = new Date(Date.now() - 5 * 60_000).toISOString();
 
 export const projects = [
   {
@@ -61,11 +64,11 @@ export const session = {
   status: 'completed',
   closeReason: 'manual',
   summary: 'The tester completed checkout and observed the confirmation.',
-  startedAt: '2026-06-14T09:55:00.000Z',
+  startedAt: recent,
   endedAt: now,
   deletedAt: null,
   purgeAt: null,
-  createdAt: '2026-06-14T09:55:00.000Z',
+  createdAt: recent,
   updatedAt: now,
 };
 
@@ -133,10 +136,17 @@ function uidFor(role: 'admin' | 'qa-engineer' | 'super-admin'): string {
   return 'super-admin-uid';
 }
 
+function emailFor(role: 'admin' | 'qa-engineer' | 'super-admin'): string {
+  if (role === 'admin') return 'admin@example.test';
+  if (role === 'qa-engineer') return 'qa@example.test';
+  return 'super@example.test';
+}
+
 function me(role: 'admin' | 'qa-engineer' | 'super-admin', mustChangePassword: boolean) {
   if (role === 'super-admin') {
     return {
       uid: uidFor(role),
+      email: emailFor(role),
       role,
       tenantId: null,
       mustChangePassword,
@@ -146,6 +156,7 @@ function me(role: 'admin' | 'qa-engineer' | 'super-admin', mustChangePassword: b
   }
   return {
     uid: uidFor(role),
+    email: emailFor(role),
     role,
     tenantId: ids.tenant,
     mustChangePassword,
@@ -230,8 +241,14 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
       return json(route, projects[0]);
     }
     if (method === 'GET' && url.pathname === '/api/v1/dashboard/sessions') {
+      // Terminate pagination on the second page (a cursor is present) so the
+      // Productivity view's paginate-until-window loop stops; the first page
+      // still advertises a nextCursor so the records list shows "Load more".
+      if (url.searchParams.has('cursor')) {
+        return json(route, { items: [], nextCursor: null });
+      }
       return json(route, {
-        items: [{ ...session, projectName: 'Checkout', recordedByEmail: 'qa@example.test', durationSeconds: 300, generatedTestCount: 1 }],
+        items: [{ ...session, projectName: 'Checkout', recordedByEmail: 'qa@example.test', durationSeconds: 300, generatedTestCount: 1, testTypes: ['ui'], integrationStatus: null }],
         nextCursor: 'next-page',
       });
     }
@@ -350,4 +367,20 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
 
 export async function authenticate(page: Page): Promise<void> {
   await page.addInitScript(() => window.localStorage.setItem('qassistant:e2e-authenticated', 'true'));
+}
+
+/** Pick an option in a shadcn/Radix Select (a combobox trigger + listbox options). */
+export async function chooseOption(
+  page: Page,
+  comboboxName: string | RegExp,
+  optionName: string | RegExp,
+): Promise<void> {
+  await page.getByRole('combobox', { name: comboboxName }).click();
+  await page.getByRole('option', { name: optionName }).click();
+}
+
+/** Open the sidebar-footer account menu and sign out. */
+export async function signOut(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Open account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
 }

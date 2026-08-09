@@ -13,9 +13,9 @@ test('shows a loading state while recordings are fetched, then renders the list'
 
   await page.goto('/sessions', { waitUntil: 'commit' });
 
-  await expect(page.getByText('Loading recordings...')).toBeVisible();
+  await expect(page.locator('[data-slot="skeleton"]').first()).toBeVisible();
 
-  await expect(page.getByText('Loading recordings...')).toBeHidden();
+  await expect(page.locator('[data-slot="skeleton"]').first()).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Checkout' })).toBeVisible();
 });
@@ -28,9 +28,9 @@ test('shows a loading state while projects are fetched, then renders the project
 
   await page.goto('/projects', { waitUntil: 'commit' });
 
-  await expect(page.getByText('Loading projects...')).toBeVisible();
+  await expect(page.getByText(/Loading projects/)).toBeVisible();
 
-  await expect(page.getByText('Loading projects...')).toBeHidden();
+  await expect(page.getByText(/Loading projects/)).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Project context' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Checkout' })).toBeVisible();
+  await expect(page.getByText('https://checkout.example.test')).toBeVisible();
 });

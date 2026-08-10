@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthContext';
 import { BugMark } from '@/components/Logo';
@@ -12,9 +13,20 @@ import { Label } from '@/components/ui/label';
  * which tenant to sign into by its slug; leaving it blank signs in as the
  * super-admin. On success the AuthProvider bootstraps /auth/me and the router
  * routes by role (or to the forced password-change screen if the marker is set).
+ *
+ * On success we explicitly navigate to the landing target instead of leaving
+ * the URL untouched: the login screen renders outside <Routes>, so without this
+ * the address bar keeps whatever path it held (e.g. a browser-restored
+ * `/sessions` after a token expiry) and the user lands there instead of the
+ * role's default view. We honour an intended `state.from` if a guard supplied
+ * one, otherwise fall back to `/`, which redirects per role (Overview for
+ * admin/qa-engineer, Tenants for super-admin).
  */
 export function LoginPage(): JSX.Element {
   const { signIn } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: Location } | null)?.from?.pathname;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [tenantSlug, setTenantSlug] = useState('');
@@ -27,6 +39,7 @@ export function LoginPage(): JSX.Element {
     setBusy(true);
     try {
       await signIn(email, password, tenantSlug || undefined);
+      navigate(from ?? '/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
     } finally {

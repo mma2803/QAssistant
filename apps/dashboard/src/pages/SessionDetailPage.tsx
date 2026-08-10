@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { ArrowLeft, Download } from 'lucide-react';
 import type { GeneratedTest, GenerateRequest, TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
@@ -63,6 +64,34 @@ export function SessionDetailPage(): JSX.Element {
     setBusyId(id);
     try {
       await fn();
+      detail.reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // Codegen is an async job: POST /generate (and /regenerate) only *enqueues* and
+  // returns immediately; the worker writes the new version a few seconds later.
+  // A single reload right after enqueue races the worker and shows nothing, which
+  // invites re-clicks that pile up duplicate jobs. So we hold the busy state and
+  // poll the generations list until a new version appears (or we give up),
+  // keeping the button disabled the whole time.
+  async function withGeneration(id: string, enqueue: () => Promise<unknown>): Promise<void> {
+    const before = detail.data?.generations.length ?? 0;
+    setBusyId(id);
+    try {
+      await enqueue();
+      const stepMs = 2000;
+      const deadlineMs = 45000;
+      for (let waited = 0; waited < deadlineMs; waited += stepMs) {
+        await new Promise((resolve) => setTimeout(resolve, stepMs));
+        const { items } = await api.listGenerations(sessionId);
+        if (items.length > before) {
+          detail.reload();
+          return;
+        }
+      }
+      toast.error('Generation is taking longer than expected — refresh in a moment.');
       detail.reload();
     } finally {
       setBusyId(null);
@@ -233,11 +262,11 @@ export function SessionDetailPage(): JSX.Element {
           withBusy('comment', () => api.addComment(sessionId, { body, generatedTestId }))
         }
         onRegenerate={(sourceCommentId, override) =>
-          withBusy('regen', () =>
+          withGeneration('regen', () =>
             api.regenerate(sessionId, { kind: 'playwright_test', sourceCommentId, ...override }),
           )
         }
-        onGenerate={(override) => withBusy('gen', () => api.generate(sessionId, override))}
+        onGenerate={(override) => withGeneration('gen', () => api.generate(sessionId, override))}
       />
     </div>
   );
@@ -361,7 +390,7 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
             disabled={busyId === 'gen' || customIncomplete}
             onClick={() => void props.onGenerate(selectedOverride())}
           >
-            {busyId === 'gen' ? 'Queuing…' : 'Generate'}
+            {busyId === 'gen' ? 'Generating…' : 'Generate'}
           </Button>
         </div>
       </CardHeader>
@@ -484,7 +513,7 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
               disabled={busyId === 'regen' || customIncomplete}
               onClick={() => void props.onRegenerate(undefined, selectedOverride())}
             >
-              {busyId === 'regen' ? 'Queuing…' : 'Regenerate with comments'}
+              {busyId === 'regen' ? 'Regenerating…' : 'Regenerate with comments'}
             </Button>
           </div>
         </div>

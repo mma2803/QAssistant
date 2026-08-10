@@ -20,3 +20,6 @@ test-results/
 .DS_Store
 .idea/
 .vscode/
+
+# Local analysis fixtures (exported sessions used to debug replay, etc.)
+debug/

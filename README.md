@@ -2,6 +2,8 @@
 
 QAssistant is a greenfield, multi-tenant QA capture platform. It records manual web testing sessions, stores the replayable evidence, generates Playwright automation, and gives QA managers tenant-scoped visibility.
 
+> **QA manager?** See the benefit-first product pitch → [`docs/qa-managers/README.md`](docs/qa-managers/README.md)
+
 ## Current State
 
 The OpenSpec change at `openspec/changes/archive/2026-06-23-qassistant-mvp` records the original MVP decisions and the API/data-model contract; `openspec/changes/archive/2026-07-27-self-hosted-vps-migration` records the move off GCP to a self-hosted VPS. The application code exists: a NestJS API, a React dashboard, a Chrome MV3 extension, an MCP server, a shared TypeScript package, and the self-hosted infra (Docker Compose + Caddy + GitHub Actions). See `openspec/changes/archive/2026-06-23-qassistant-mvp/data-model-and-api-contract.md` for the authoritative schema and REST surface, and `openspec/specs/platform-infrastructure/spec.md` / `openspec/specs/identity-and-tenancy/spec.md` for the current infrastructure and auth requirements.

@@ -4,6 +4,7 @@ import type { Project, TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 
 import { api } from '@/lib/api';
+import { useI18n } from '@/i18n';
 import { useAuth } from '@/auth/AuthContext';
 import { useAsync } from '@/lib/useAsync';
 import { renderMarkdown } from '@/lib/markdown';
@@ -52,6 +53,7 @@ function Meta({ label, children }: { label: string; children: React.ReactNode })
  * (the backend role guard is the authoritative control).
  */
 export function ProjectsPage(): JSX.Element {
+  const { t } = useI18n();
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const projects = useAsync<Project[]>(() => api.listProjects(), []);
@@ -141,7 +143,7 @@ export function ProjectsPage(): JSX.Element {
       projects.reload();
       setFwSaved(true);
     } catch (err) {
-      setFwError(err instanceof Error ? err.message : 'Could not save the project framework');
+      setFwError(err instanceof Error ? err.message : t('projects.saveFrameworkError'));
     } finally {
       setFwBusy(false);
     }
@@ -162,7 +164,7 @@ export function ProjectsPage(): JSX.Element {
       projects.reload();
       setKmSaved(true);
     } catch (err) {
-      setKmError(err instanceof Error ? err.message : 'Could not save knowledge hub');
+      setKmError(err instanceof Error ? err.message : t('projects.saveKnowledgeError'));
     } finally {
       setKmBusy(false);
     }
@@ -186,7 +188,7 @@ export function ProjectsPage(): JSX.Element {
       projects.reload();
       setSelected(created.id);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Could not create project');
+      setCreateError(err instanceof Error ? err.message : t('projects.createError'));
     } finally {
       setBusy(false);
     }
@@ -195,24 +197,26 @@ export function ProjectsPage(): JSX.Element {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Project context"
+        title={t('projects.title')}
         actions={
           isAdmin ? (
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              New project
+              {t('projects.newProject')}
             </Button>
           ) : undefined
         }
       />
 
-      {projects.loading && <p className="text-muted-foreground text-sm">Loading projects…</p>}
+      {projects.loading && (
+        <p className="text-muted-foreground text-sm">{t('projects.loadingProjects')}</p>
+      )}
       {projects.error && <p className="text-destructive text-sm">{projects.error}</p>}
       {projects.data && projects.data.length === 0 && (
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            No active projects yet.
-            {isAdmin && ' Use “New project” to create one.'}
+            {t('projects.noProjects')}
+            {isAdmin && t('projects.noProjectsAdminHint')}
           </CardContent>
         </Card>
       )}
@@ -221,9 +225,9 @@ export function ProjectsPage(): JSX.Element {
         <>
           {/* Project switcher */}
           <div className="flex flex-wrap items-center gap-3">
-            <Label className="text-muted-foreground">Project</Label>
+            <Label className="text-muted-foreground">{t('projects.projectLabel')}</Label>
             <Select value={current.id} onValueChange={(v) => setSelected(v)}>
-              <SelectTrigger className="w-64" aria-label="Project">
+              <SelectTrigger className="w-64" aria-label={t('projects.projectLabel')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -239,39 +243,36 @@ export function ProjectsPage(): JSX.Element {
 
           <Tabs defaultValue="overview">
             <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="knowledge">Knowledge hub</TabsTrigger>
+              <TabsTrigger value="overview">{t('projects.overviewTab')}</TabsTrigger>
+              <TabsTrigger value="knowledge">{t('projects.knowledgeTab')}</TabsTrigger>
             </TabsList>
 
             {/* --- Overview: details + test framework --- */}
             <TabsContent value="overview" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Details</CardTitle>
+                  <CardTitle>{t('projects.details')}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-8">
-                  <Meta label="Base URL">{current.baseUrl}</Meta>
-                  <Meta label="Status">
+                  <Meta label={t('projects.baseUrl')}>{current.baseUrl}</Meta>
+                  <Meta label={t('common.status')}>
                     <StatusBadge status={current.status} />
                   </Meta>
-                  <Meta label="Screenshots default">
-                    {current.screenshotDefault ? 'On' : 'Off'}
+                  <Meta label={t('projects.screenshotsDefault')}>
+                    {current.screenshotDefault ? t('projects.on') : t('projects.off')}
                   </Meta>
                 </CardContent>
               </Card>
 
               <Card className="max-w-2xl">
                 <CardHeader>
-                  <CardTitle>Test framework</CardTitle>
-                  <CardDescription>
-                    Default codegen target for this project. Falls back to the tenant default when
-                    set to inherit.
-                  </CardDescription>
+                  <CardTitle>{t('projects.testFramework')}</CardTitle>
+                  <CardDescription>{t('projects.testFrameworkDesc')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {fwError && <p className="text-destructive text-sm">{fwError}</p>}
                   <div className="space-y-2">
-                    <Label>Framework / language</Label>
+                    <Label>{t('projects.frameworkLanguage')}</Label>
                     <Select
                       value={fwChoice === '' ? INHERIT : fwChoice}
                       onValueChange={(v) => {
@@ -283,44 +284,44 @@ export function ProjectsPage(): JSX.Element {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={INHERIT}>Inherit tenant default</SelectItem>
+                        <SelectItem value={INHERIT}>{t('projects.inheritTenantDefault')}</SelectItem>
                         {TEST_FRAMEWORK_PRESETS.map((p, i) => (
                           <SelectItem key={`${p.framework}-${p.language}`} value={String(i)}>
                             {p.framework} / {p.language}
                           </SelectItem>
                         ))}
-                        <SelectItem value={CUSTOM}>Custom…</SelectItem>
+                        <SelectItem value={CUSTOM}>{t('projects.custom')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   {fwChoice === CUSTOM && (
                     <div className="flex flex-wrap gap-3">
                       <div className="flex-1 space-y-2">
-                        <Label>Framework</Label>
+                        <Label>{t('projects.framework')}</Label>
                         <Input
                           value={fwCustomName}
                           onChange={(e) => {
                             setFwCustomName(e.target.value);
                             setFwSaved(false);
                           }}
-                          placeholder="Framework"
+                          placeholder={t('projects.framework')}
                         />
                       </div>
                       <div className="flex-1 space-y-2">
-                        <Label>Language</Label>
+                        <Label>{t('projects.language')}</Label>
                         <Input
                           value={fwCustomLang}
                           onChange={(e) => {
                             setFwCustomLang(e.target.value);
                             setFwSaved(false);
                           }}
-                          placeholder="Language"
+                          placeholder={t('projects.language')}
                         />
                       </div>
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label>Default test type</Label>
+                    <Label>{t('projects.defaultTestType')}</Label>
                     <Select
                       value={ttChoice === '' ? INHERIT : ttChoice}
                       onValueChange={(v) => {
@@ -332,9 +333,9 @@ export function ProjectsPage(): JSX.Element {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={INHERIT}>Inherit tenant default</SelectItem>
-                        <SelectItem value="ui">UI test</SelectItem>
-                        <SelectItem value="backend">Back-end test</SelectItem>
+                        <SelectItem value={INHERIT}>{t('projects.inheritTenantDefault')}</SelectItem>
+                        <SelectItem value="ui">{t('projects.uiTest')}</SelectItem>
+                        <SelectItem value="backend">{t('projects.backendTest')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -344,9 +345,11 @@ export function ProjectsPage(): JSX.Element {
                       disabled={fwBusy || fwCustomIncomplete}
                       onClick={() => void onSaveFramework()}
                     >
-                      {fwBusy ? 'Saving…' : 'Save framework'}
+                      {fwBusy ? t('common.saving') : t('projects.saveFramework')}
                     </Button>
-                    {fwSaved && <span className="text-muted-foreground text-sm">Saved ✓</span>}
+                    {fwSaved && (
+                      <span className="text-muted-foreground text-sm">{t('projects.saved')}</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -356,11 +359,8 @@ export function ProjectsPage(): JSX.Element {
             <TabsContent value="knowledge">
               <Card>
                 <CardHeader>
-                  <CardTitle>Knowledge hub</CardTitle>
-                  <CardDescription>
-                    Guidance passed to the test generator. New projects start from a default
-                    template — edit or clear it to fit this app.
-                  </CardDescription>
+                  <CardTitle>{t('projects.knowledgeTab')}</CardTitle>
+                  <CardDescription>{t('projects.knowledgeDesc')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {kmError && <p className="text-destructive text-sm">{kmError}</p>}
@@ -368,8 +368,8 @@ export function ProjectsPage(): JSX.Element {
                   {isAdmin ? (
                     <Tabs defaultValue="write">
                       <TabsList>
-                        <TabsTrigger value="write">Write</TabsTrigger>
-                        <TabsTrigger value="preview">Preview</TabsTrigger>
+                        <TabsTrigger value="write">{t('projects.write')}</TabsTrigger>
+                        <TabsTrigger value="preview">{t('projects.preview')}</TabsTrigger>
                       </TabsList>
                       <TabsContent value="write" className="space-y-4">
                         <Textarea
@@ -380,7 +380,7 @@ export function ProjectsPage(): JSX.Element {
                           }}
                           rows={16}
                           className="font-mono text-xs"
-                          placeholder={'# How this app works\n\nLogin, key flows, important selectors…'}
+                          placeholder={t('projects.knowledgePlaceholder')}
                         />
                         <div className="flex items-center gap-3">
                           <Button
@@ -388,9 +388,13 @@ export function ProjectsPage(): JSX.Element {
                             disabled={kmBusy}
                             onClick={() => void onSaveKnowledge()}
                           >
-                            {kmBusy ? 'Saving…' : 'Save knowledge hub'}
+                            {kmBusy ? t('common.saving') : t('projects.saveKnowledge')}
                           </Button>
-                          {kmSaved && <span className="text-muted-foreground text-sm">Saved ✓</span>}
+                          {kmSaved && (
+                            <span className="text-muted-foreground text-sm">
+                              {t('projects.saved')}
+                            </span>
+                          )}
                         </div>
                       </TabsContent>
                       <TabsContent value="preview">
@@ -400,7 +404,9 @@ export function ProjectsPage(): JSX.Element {
                             dangerouslySetInnerHTML={{ __html: renderMarkdown(km) }}
                           />
                         ) : (
-                          <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>
+                          <p className="text-muted-foreground text-sm">
+                            {t('projects.nothingToPreview')}
+                          </p>
                         )}
                       </TabsContent>
                     </Tabs>
@@ -411,7 +417,7 @@ export function ProjectsPage(): JSX.Element {
                     />
                   ) : (
                     <p className="text-muted-foreground text-sm">
-                      No knowledge-hub overview has been written for this project.
+                      {t('projects.noKnowledgeWritten')}
                     </p>
                   )}
                 </CardContent>
@@ -425,23 +431,21 @@ export function ProjectsPage(): JSX.Element {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New project</DialogTitle>
-            <DialogDescription>
-              Its knowledge hub starts from the default guidance template.
-            </DialogDescription>
+            <DialogTitle>{t('projects.newProject')}</DialogTitle>
+            <DialogDescription>{t('projects.newProjectDesc')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {createError && <p className="text-destructive text-sm">{createError}</p>}
             <div className="space-y-2">
-              <Label htmlFor="p-name">Name</Label>
+              <Label htmlFor="p-name">{t('projects.name')}</Label>
               <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="p-url">Base URL</Label>
+              <Label htmlFor="p-url">{t('projects.baseUrl')}</Label>
               <Input
                 id="p-url"
                 type="url"
-                placeholder="https://app.example.com"
+                placeholder={t('projects.baseUrlPlaceholder')}
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
@@ -451,18 +455,18 @@ export function ProjectsPage(): JSX.Element {
                 checked={screenshotDefault}
                 onCheckedChange={(v) => setScreenshotDefault(v === true)}
               />
-              Screenshots by default
+              {t('projects.screenshotsByDefault')}
             </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               disabled={busy || !name.trim() || !baseUrl.trim()}
               onClick={() => void onCreate()}
             >
-              {busy ? 'Creating…' : 'Create project'}
+              {busy ? t('projects.creating') : t('projects.createProject')}
             </Button>
           </DialogFooter>
         </DialogContent>

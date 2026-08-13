@@ -74,6 +74,14 @@ export const tenants = pgTable(
     defaultTestLanguage: text('default_test_language').notNull().default('TypeScript'),
     // Tenant-wide default test type (change: configurable-test-type). See migration 0008.
     defaultTestType: text('default_test_type').notNull().default('ui'),
+    // Which reusable signup link provisioned this tenant, if any; NULL for
+    // tenants created directly by the super-admin (change: tenant-signup-links,
+    // migration 0010). FK declared in the migration to avoid ordering issues.
+    createdViaInvitationId: uuid('created_via_invitation_id'),
+    // Soft delete (migration 0011): non-null means the super-admin deleted the
+    // tenant. It is hidden from the provisioning list and its users cannot sign
+    // in, but all data is preserved (reversible; no cascade).
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt,
     updatedAt,
   },
@@ -81,6 +89,8 @@ export const tenants = pgTable(
     slugUnique: uniqueIndex('tenants_slug_key').on(t.slug),
     statusCheck: check('tenants_status_check', inList('status', TENANT_STATUSES)),
     testTypeCheck: check('tenants_default_test_type_check', inList('default_test_type', TEST_TYPES)),
+    createdViaInvitationIdx: index('tenants_created_via_invitation_id_idx').on(t.createdViaInvitationId),
+    deletedAtIdx: index('tenants_deleted_at_idx').on(t.deletedAt),
   }),
 );
 
@@ -424,6 +434,33 @@ export const superAdmins = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// 3.10b tenant_invitations (reusable signup links, migration 0010)
+// ---------------------------------------------------------------------------
+// Super-admin-issued, reusable, expiring links that delegate tenant + first
+// admin provisioning. Like auth_tokens, only the SHA-256 hash of the token is
+// stored; the plaintext exists only in the issue response. No RLS: touched only
+// by the app_superadmin (BYPASSRLS) pool (issue/list/revoke) and the public
+// redeem, which also runs withSuperadmin. Reusable ⇒ no `used_at`; the count of
+// tenants a link produced is derived from tenants.created_via_invitation_id.
+export const tenantInvitations = pgTable(
+  'tenant_invitations',
+  {
+    id: uuid('id').primaryKey(),
+    tokenHash: text('token_hash').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => superAdmins.id, { onDelete: 'restrict' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt,
+    updatedAt,
+  },
+  (t) => ({
+    tokenHashUnique: uniqueIndex('tenant_invitations_token_hash_key').on(t.tokenHash),
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // 3.11 auth_tokens (self-hosted auth, migration 0009)
 // ---------------------------------------------------------------------------
 // Opaque bearer tokens (access + refresh) for both tenant_users and
@@ -523,6 +560,7 @@ export const schema = {
   generatedTests,
   generationComments,
   superAdmins,
+  tenantInvitations,
   authTokens,
   codegenJobs,
   encryptedSecrets,

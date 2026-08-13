@@ -182,6 +182,15 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
   let currentUsers = structuredClone(users);
   let currentGeneration = structuredClone(generation);
   let currentTenants = structuredClone([tenant]);
+  let currentInvitations: Array<{
+    id: string;
+    expiresAt: string;
+    revokedAt: string | null;
+    createdTenantCount: number;
+    createdTenants: Array<{ tenantId: string; name: string; slug: string; adminEmail: string | null; createdAt: string }>;
+    status: string;
+    createdAt: string;
+  }> = [];
 
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -353,12 +362,82 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}): 
         201,
       );
     }
+    // Signup links (tenant-signup-links). Declared before the `:tenantId` PATCH
+    // match so the literal /invitations segment is never treated as a tenant id.
+    if (method === 'GET' && url.pathname === '/api/v1/admin/tenants/invitations') {
+      return json(route, currentInvitations);
+    }
+    if (method === 'POST' && url.pathname === '/api/v1/admin/tenants/invitations') {
+      const b = body as { expiresInDays?: number } | undefined;
+      const id = `10000000-0000-4000-8000-${String(currentInvitations.length + 1).padStart(12, '0')}`;
+      const expiresAt = new Date(Date.now() + (b?.expiresInDays ?? 7) * 86_400_000).toISOString();
+      currentInvitations = [
+        ...currentInvitations,
+        { id, expiresAt, revokedAt: null, createdTenantCount: 0, createdTenants: [], status: 'active', createdAt: now },
+      ];
+      return json(route, { id, token: `mock-token-${id}`, expiresAt }, 201);
+    }
+    const revokeMatch = url.pathname.match(/^\/api\/v1\/admin\/tenants\/invitations\/([^/]+)$/);
+    if (method === 'DELETE' && revokeMatch) {
+      currentInvitations = currentInvitations.map((i) =>
+        i.id === revokeMatch[1] ? { ...i, status: 'revoked', revokedAt: now } : i,
+      );
+      return route.fulfill({ status: 204, body: '' });
+    }
+
+    // Public tenant self-signup (tenant-signup-links). A token containing
+    // "invalid" is treated as unusable so the error state can be exercised.
+    const validateMatch = url.pathname.match(/^\/api\/v1\/signup\/([^/]+)$/);
+    if (method === 'GET' && validateMatch) {
+      const valid = !validateMatch[1].includes('invalid');
+      return json(route, {
+        valid,
+        expiresAt: valid ? new Date(Date.now() + 7 * 86_400_000).toISOString() : null,
+      });
+    }
+    if (method === 'POST' && url.pathname === '/api/v1/signup') {
+      const b = body as { name?: string; firstAdmin?: { email?: string } } | undefined;
+      if (currentTenants.some((t) => t.name === b?.name)) {
+        return json(route, { error: { code: 'conflict', message: 'A tenant with this name already exists' } }, 409);
+      }
+      const newTenant = {
+        ...tenant,
+        id: `20000000-0000-4000-8000-${String(currentTenants.length + 1).padStart(12, '0')}`,
+        name: b?.name ?? 'New tenant',
+        slug: (b?.name ?? 'new-tenant').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        status: 'active',
+      };
+      currentTenants = [...currentTenants, newTenant];
+      return json(
+        route,
+        {
+          tenant: newTenant,
+          firstAdmin: {
+            id: 'signup-admin-uid',
+            tenantId: newTenant.id,
+            email: b?.firstAdmin?.email ?? 'admin@example.test',
+            role: 'admin',
+            status: 'active',
+            mustChangePassword: false,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        201,
+      );
+    }
+
     const tenantMatch = url.pathname.match(/^\/api\/v1\/admin\/tenants\/([^/]+)$/);
     if (method === 'PATCH' && tenantMatch) {
       currentTenants = currentTenants.map((t) =>
         t.id === tenantMatch[1] ? { ...t, ...(body as object) } : t,
       );
       return json(route, currentTenants.find((t) => t.id === tenantMatch[1]));
+    }
+    if (method === 'DELETE' && tenantMatch) {
+      // Soft-delete: the API hides it, so the mock just drops it from the list.
+      currentTenants = currentTenants.filter((t) => t.id !== tenantMatch[1]);
+      return route.fulfill({ status: 204, body: '' });
     }
 
     return json(route, { error: { code: 'not_mocked', message: `${method} ${url.pathname} is not mocked` } }, 501);

@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { KeyRound } from 'lucide-react';
+import { passwordSchema } from '@qassistant/shared';
 
 import { useAuth } from '@/auth/AuthContext';
+import { useI18n } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,6 +18,7 @@ import { Label } from '@/components/ui/label';
  */
 export function PasswordChangePage(): JSX.Element {
   const { completePasswordChange, signOut } = useAuth();
+  const { t } = useI18n();
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,19 +27,19 @@ export function PasswordChangePage(): JSX.Element {
   async function onSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
     setError(null);
-    if (pw1.length < 8) {
-      setError('Password must be at least 8 characters');
+    if (!passwordSchema.safeParse(pw1).success) {
+      setError(t('password.requirements'));
       return;
     }
     if (pw1 !== pw2) {
-      setError('Passwords do not match');
+      setError(t('password.mismatch'));
       return;
     }
     setBusy(true);
     try {
       await completePasswordChange(pw1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not change password');
+      setError(err instanceof Error ? err.message : t('passwordChange.failed'));
     } finally {
       setBusy(false);
     }
@@ -49,15 +52,13 @@ export function PasswordChangePage(): JSX.Element {
           <div className="bg-primary/10 text-primary mb-1 flex size-10 items-center justify-center rounded-lg">
             <KeyRound className="size-5" />
           </div>
-          <h1 className="text-xl leading-none font-semibold">Set a new password</h1>
-          <CardDescription>
-            Your account requires a password change before you can continue.
-          </CardDescription>
+          <h1 className="text-xl leading-none font-semibold">{t('passwordChange.title')}</h1>
+          <CardDescription>{t('passwordChange.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="pw1">New password</Label>
+              <Label htmlFor="pw1">{t('password.newPassword')}</Label>
               <Input
                 id="pw1"
                 type="password"
@@ -66,9 +67,10 @@ export function PasswordChangePage(): JSX.Element {
                 onChange={(e) => setPw1(e.target.value)}
                 required
               />
+              <p className="text-muted-foreground text-xs">{t('password.requirements')}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pw2">Confirm password</Label>
+              <Label htmlFor="pw2">{t('password.confirmPassword')}</Label>
               <Input
                 id="pw2"
                 type="password"
@@ -81,10 +83,10 @@ export function PasswordChangePage(): JSX.Element {
             {error && <p className="text-destructive text-sm">{error}</p>}
             <div className="flex gap-2">
               <Button type="submit" disabled={busy} className="flex-1">
-                {busy ? 'Saving…' : 'Save password'}
+                {busy ? t('passwordChange.saving') : t('passwordChange.save')}
               </Button>
               <Button type="button" variant="outline" onClick={() => void signOut()}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </form>

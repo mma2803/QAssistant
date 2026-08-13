@@ -15,6 +15,7 @@ import type { DashboardSessionListItem } from '@qassistant/shared';
 import { api } from '@/lib/api';
 import { useAsync } from '@/lib/useAsync';
 import { formatRelative } from '@/lib/format';
+import { useI18n } from '@/i18n';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge, IntegrationBadge, TestTypeBadge } from '@/components/StatusBadge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,6 +52,7 @@ function StatCard({
  * backend endpoint — this reuses GET /dashboard/sessions.
  */
 export function OverviewPage(): JSX.Element {
+  const { t } = useI18n();
   const sessions = useAsync(() => api.listSessions({ limit: 100 }), []);
   const items: DashboardSessionListItem[] = sessions.data?.items ?? [];
 
@@ -103,16 +105,25 @@ export function OverviewPage(): JSX.Element {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Welcome back 👋" />
+      <PageHeader title={t('overview.welcome')} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Recordings" value={stats.total} sub="Most recent 100" icon={Video} />
-        <StatCard label="Active sessions" value={stats.active} icon={Clock} />
-        <StatCard label="Tests generated" value={stats.tests} icon={FileCode2} />
         <StatCard
-          label="Integrated"
+          label={t('overview.recordings')}
+          value={stats.total}
+          sub={t('overview.recordingsSub')}
+          icon={Video}
+        />
+        <StatCard label={t('overview.activeSessions')} value={stats.active} icon={Clock} />
+        <StatCard label={t('overview.testsGenerated')} value={stats.tests} icon={FileCode2} />
+        <StatCard
+          label={t('overview.integrated')}
           value={stats.integrated}
-          sub={stats.successRate !== null ? `${stats.successRate}% success rate` : 'No attempts yet'}
+          sub={
+            stats.successRate !== null
+              ? t('overview.successRate', { rate: stats.successRate })
+              : t('overview.noAttempts')
+          }
           icon={CheckCircle2}
         />
       </div>
@@ -120,8 +131,8 @@ export function OverviewPage(): JSX.Element {
       <div className="grid gap-4 lg:grid-cols-7">
         <Card className="lg:col-span-4">
           <CardHeader>
-            <CardTitle>Recordings over time</CardTitle>
-            <CardDescription>Last 14 days.</CardDescription>
+            <CardTitle>{t('overview.recordingsOverTime')}</CardTitle>
+            <CardDescription>{t('overview.last14Days')}</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
@@ -160,13 +171,15 @@ export function OverviewPage(): JSX.Element {
 
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Recent recordings</CardTitle>
-            <CardDescription>Your latest sessions.</CardDescription>
+            <CardTitle>{t('overview.recentRecordings')}</CardTitle>
+            <CardDescription>{t('overview.latestSessions')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-1">
-            {sessions.loading && <p className="text-muted-foreground text-sm">Loading…</p>}
+            {sessions.loading && (
+              <p className="text-muted-foreground text-sm">{t('common.loading')}</p>
+            )}
             {!sessions.loading && recent.length === 0 && (
-              <p className="text-muted-foreground text-sm">No recordings yet.</p>
+              <p className="text-muted-foreground text-sm">{t('overview.noRecordings')}</p>
             )}
             {recent.map((s) => (
               <Link
@@ -177,7 +190,8 @@ export function OverviewPage(): JSX.Element {
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium">{s.projectName}</div>
                   <div className="text-muted-foreground truncate text-xs">
-                    {s.jiraId || s.description || 'No context'} · {formatRelative(s.startedAt)}
+                    {s.jiraId || s.description || t('overview.noContext')} ·{' '}
+                    {formatRelative(s.startedAt)}
                   </div>
                 </div>
                 {s.integrationStatus ? (
@@ -194,8 +208,8 @@ export function OverviewPage(): JSX.Element {
       <div className="grid gap-4 lg:grid-cols-7">
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Generated test types</CardTitle>
-            <CardDescription>UI vs back-end across recent sessions.</CardDescription>
+            <CardTitle>{t('overview.generatedTestTypes')}</CardTitle>
+            <CardDescription>{t('overview.uiVsBackend')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between">
@@ -207,15 +221,15 @@ export function OverviewPage(): JSX.Element {
               <span className="text-sm font-medium">{testTypeSplit.backend}</span>
             </div>
             {testTypeSplit.ui + testTypeSplit.backend === 0 && (
-              <p className="text-muted-foreground text-sm">No tests generated yet.</p>
+              <p className="text-muted-foreground text-sm">{t('overview.noTests')}</p>
             )}
           </CardContent>
         </Card>
 
         <Card className="lg:col-span-4">
           <CardHeader>
-            <CardTitle>Integration status</CardTitle>
-            <CardDescription>Where your candidate tests stand.</CardDescription>
+            <CardTitle>{t('overview.integrationStatus')}</CardTitle>
+            <CardDescription>{t('overview.candidateStand')}</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(['ready_to_integrate', 'integrated', 'failed_to_integrate', 'not_ready'] as const).map(

@@ -1,7 +1,8 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Shell } from './components/Shell';
 import { LoginPage } from './pages/LoginPage';
+import { SignupPage } from './pages/SignupPage';
 import { PasswordChangePage } from './pages/PasswordChangePage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SessionsPage } from './pages/SessionsPage';
@@ -24,6 +25,18 @@ import { TenantsPage } from './pages/TenantsPage';
  */
 export function App(): JSX.Element {
   const { loading, signedIn, mustChangePassword, role } = useAuth();
+  const location = useLocation();
+
+  // Public tenant self-signup (change: tenant-signup-links). Must render for a
+  // signed-out visitor and without waiting on the auth bootstrap, so it is
+  // matched before any of the auth gates below.
+  if (location.pathname.startsWith('/signup/')) {
+    return (
+      <Routes>
+        <Route path="/signup/:token" element={<SignupPage />} />
+      </Routes>
+    );
+  }
 
   if (loading) {
     return (

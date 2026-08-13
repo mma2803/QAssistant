@@ -50,20 +50,21 @@ test('enforces and completes the first-login password change', async ({ page }) 
   await page.getByLabel('New password').fill('short');
   await page.getByLabel('Confirm password').fill('short');
   await page.getByRole('button', { name: 'Save password' }).click();
-  await expect(page.getByText('Password must be at least 8 characters')).toBeVisible();
+  // The error paragraph (not the always-visible policy hint) surfaces the rule.
+  await expect(page.locator('p.text-destructive')).toHaveText(/at least 8 characters/i);
 
-  await page.getByLabel('New password').fill('new-password-123');
+  await page.getByLabel('New password').fill('New-password-123');
   await page.getByLabel('Confirm password').fill('different-password');
   await page.getByRole('button', { name: 'Save password' }).click();
   await expect(page.getByText('Passwords do not match')).toBeVisible();
 
-  await page.getByLabel('Confirm password').fill('new-password-123');
+  await page.getByLabel('Confirm password').fill('New-password-123');
   await page.getByRole('button', { name: 'Save password' }).click();
   await expect(page.getByRole('heading', { name: 'Project context' })).toBeVisible();
   expect(requests).toContainEqual(expect.objectContaining({
     method: 'POST',
     pathname: '/api/v1/auth/complete-password-change',
-    body: { newPassword: 'new-password-123' },
+    body: { newPassword: 'New-password-123' },
   }));
 });
 

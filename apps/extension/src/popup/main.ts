@@ -1,7 +1,8 @@
 import type { Project, Session } from '@qassistant/shared';
-import { startSessionRequestSchema } from '@qassistant/shared';
+import { passwordSchema, startSessionRequestSchema } from '@qassistant/shared';
 import type { AuthState, ActiveSessionState } from '../shared/messages.js';
 import { config } from '../shared/config.js';
+import { t } from '../shared/i18n.js';
 import { call } from './client.js';
 
 /**
@@ -64,7 +65,7 @@ async function render(): Promise<void> {
     return;
   }
   if (auth.role === 'super-admin') {
-    renderMessage('Super-admins cannot record sessions. Sign in as an admin or qa-engineer.');
+    renderMessage(t('msg.superAdmin'));
     return;
   }
   if (auth.mustChangePassword) {
@@ -85,23 +86,23 @@ async function render(): Promise<void> {
 function renderSignIn(prefillTenant: string | null): void {
   clear();
   who.textContent = '';
-  const email = el('input', { type: 'email', placeholder: 'you@company.com', autocomplete: 'username' });
+  const email = el('input', { type: 'email', placeholder: t('signin.email.placeholder'), autocomplete: 'username' });
   const password = el('input', {
     type: 'password',
-    placeholder: 'Password',
+    placeholder: t('signin.password.placeholder'),
     autocomplete: 'current-password',
   });
   const tenant = el('input', {
     type: 'text',
-    placeholder: 'tenant slug (blank for super-admin)',
+    placeholder: t('signin.tenant.placeholder'),
     value: prefillTenant ?? config.tenantSlug,
   });
-  const submit = el('button', { textContent: 'Sign in' });
+  const submit = el('button', { textContent: t('signin.submit') });
 
   const form = el('form', {}, [
-    el('label', {}, ['Email', email]),
-    el('label', {}, ['Password', password]),
-    el('label', {}, ['Tenant', tenant]),
+    el('label', {}, [t('signin.email.label'), email]),
+    el('label', {}, [t('signin.password.label'), password]),
+    el('label', {}, [t('signin.tenant.label'), tenant]),
     submit,
   ]);
   form.addEventListener('submit', (e) => {
@@ -119,7 +120,7 @@ async function doSignIn(
 ): Promise<void> {
   showError(null);
   if (!email || !password) {
-    showError('Enter your email and password');
+    showError(t('signin.error.missing'));
     return;
   }
   submit.disabled = true;
@@ -141,27 +142,27 @@ async function doSignIn(
 
 function renderPasswordChange(): void {
   clear();
-  const next = el('input', { type: 'password', placeholder: 'New password (min 8 chars)' });
-  const confirm = el('input', { type: 'password', placeholder: 'Confirm new password' });
-  const submit = el('button', { textContent: 'Set new password' });
-  const signOut = el('button', { className: 'secondary', textContent: 'Sign out', type: 'button' });
+  const next = el('input', { type: 'password', placeholder: t('password.new.placeholder') });
+  const confirm = el('input', { type: 'password', placeholder: t('password.confirm.placeholder') });
+  const submit = el('button', { textContent: t('password.submit') });
+  const signOut = el('button', { className: 'secondary', textContent: t('common.signOut'), type: 'button' });
 
   view.append(
-    el('p', { className: 'hint', textContent: 'You must set a new password before recording.' }),
-    el('label', {}, ['New password', next]),
-    el('label', {}, ['Confirm', confirm]),
+    el('p', { className: 'hint', textContent: t('password.hint') }),
+    el('label', {}, [t('password.new.label'), next]),
+    el('label', {}, [t('password.confirm.label'), confirm]),
     submit,
     signOut,
   );
 
   submit.addEventListener('click', () => {
     showError(null);
-    if (next.value.length < 8) {
-      showError('Password must be at least 8 characters');
+    if (!passwordSchema.safeParse(next.value).success) {
+      showError(t('password.requirements'));
       return;
     }
     if (next.value !== confirm.value) {
-      showError('Passwords do not match');
+      showError(t('password.mismatch'));
       return;
     }
     void (async () => {
@@ -188,12 +189,12 @@ async function renderStart(): Promise<void> {
   const projectsRes = await call<Project[]>({ type: 'projects:list' });
   if (!projectsRes.ok) {
     showError(projectsRes.error.message);
-    renderMessage('Could not load projects.', true);
+    renderMessage(t('start.loadFailed'), true);
     return;
   }
   const projects = projectsRes.data.filter((p) => p.status === 'active');
   if (projects.length === 0) {
-    renderMessage('No active projects available for your tenant.', true);
+    renderMessage(t('start.noProjects'), true);
     return;
   }
 
@@ -202,11 +203,11 @@ async function renderStart(): Promise<void> {
     projectSelect.append(el('option', { value: p.id, textContent: p.name }));
   }
 
-  const jira = el('input', { type: 'text', placeholder: 'PROJ-123 (optional)' });
-  const description = el('textarea', { placeholder: 'What are you testing? (used if no Jira ID)' });
+  const jira = el('input', { type: 'text', placeholder: t('start.jira.placeholder') });
+  const description = el('textarea', { placeholder: t('start.description.placeholder') });
 
   const screenshot = el('input', { type: 'checkbox' }) as HTMLInputElement;
-  const screenshotLabel = el('label', { className: 'checkbox' }, [screenshot, ' Capture screenshots']);
+  const screenshotLabel = el('label', { className: 'checkbox' }, [screenshot, ` ${t('start.screenshot.label')}`]);
 
   const syncScreenshotDefault = () => {
     const p = projects.find((x) => x.id === projectSelect.value);
@@ -215,18 +216,17 @@ async function renderStart(): Promise<void> {
   syncScreenshotDefault();
   projectSelect.addEventListener('change', syncScreenshotDefault);
 
-  const start = el('button', { textContent: 'Start recording' });
-  const signOut = el('button', { className: 'secondary', textContent: 'Sign out', type: 'button' });
+  const start = el('button', { textContent: t('start.submit') });
+  const signOut = el('button', { className: 'secondary', textContent: t('common.signOut'), type: 'button' });
 
   view.append(
-    el('label', {}, ['Project', projectSelect]),
-    el('label', {}, ['Jira ID', jira]),
-    el('label', {}, ['Description', description]),
+    el('label', {}, [t('start.project.label'), projectSelect]),
+    el('label', {}, [t('start.jira.label'), jira]),
+    el('label', {}, [t('start.description.label'), description]),
     screenshotLabel,
     el('p', {
       className: 'hint',
-      textContent:
-        'Provide a Jira ID (validated live) or a description. Screenshots default to the project setting; override per session here.',
+      textContent: t('start.hint'),
     }),
     start,
     signOut,
@@ -245,12 +245,12 @@ async function renderStart(): Promise<void> {
       screenshotEnabled: screenshot.checked,
     });
     if (!parsed.success) {
-      showError('Enter a Jira ID or a non-empty description');
+      showError(t('start.error.context'));
       return;
     }
     void (async () => {
       start.disabled = true;
-      start.textContent = 'Starting...';
+      start.textContent = t('start.starting');
       const res = await call<Session>({
         type: 'session:start',
         projectId: projectSelect.value,
@@ -259,7 +259,7 @@ async function renderStart(): Promise<void> {
         screenshotEnabled: screenshot.checked,
       });
       start.disabled = false;
-      start.textContent = 'Start recording';
+      start.textContent = t('start.submit');
       if (!res.ok) {
         // Surface server gate/Jira errors verbatim (e.g. jira_validation_failed).
         showError(res.error.message);
@@ -276,23 +276,25 @@ async function renderStart(): Promise<void> {
 function renderActive(state: ActiveSessionState): void {
   clear();
   const ctx = state.session.jiraId
-    ? `Jira ${state.session.jiraId}`
+    ? t('active.contextJira', { id: state.session.jiraId })
     : (state.session.description ?? state.project.name);
 
-  const stop = el('button', { className: 'danger', textContent: 'Stop recording' });
+  const stop = el('button', { className: 'danger', textContent: t('active.stop') });
 
   view.append(
-    el('div', { className: 'recording' }, [el('span', { className: 'dot' }), 'Recording']),
-    el('p', { className: 'hint', textContent: `Project: ${state.project.name}` }),
-    el('p', { className: 'hint', textContent: `Context: ${ctx}` }),
+    el('div', { className: 'recording' }, [el('span', { className: 'dot' }), t('active.recording')]),
+    el('p', { className: 'hint', textContent: t('active.project', { name: state.project.name }) }),
+    el('p', { className: 'hint', textContent: t('active.context', { context: ctx }) }),
     el('p', {
       className: 'hint',
-      textContent: `Screenshots: ${state.screenshotEnabled ? 'on' : 'off'} · Flag hotkey: Alt+Shift+F`,
+      textContent: t('active.screenshots', {
+        state: state.screenshotEnabled ? t('active.screenshots.on') : t('active.screenshots.off'),
+      }),
     }),
     el('div', { className: 'stats' }, [
-      stat(state.domChunksUploaded, 'DOM chunks'),
-      stat(state.screenshotsUploaded, 'Shots'),
-      stat(state.flagsRecorded, 'Flags'),
+      stat(state.domChunksUploaded, t('active.stat.domChunks')),
+      stat(state.screenshotsUploaded, t('active.stat.shots')),
+      stat(state.flagsRecorded, t('active.stat.flags')),
     ]),
     stop,
   );
@@ -300,12 +302,12 @@ function renderActive(state: ActiveSessionState): void {
   stop.addEventListener('click', () => {
     void (async () => {
       stop.disabled = true;
-      stop.textContent = 'Stopping...';
+      stop.textContent = t('active.stopping');
       const res = await call<Session | null>({ type: 'session:stop' });
       if (!res.ok) {
         showError(res.error.message);
         stop.disabled = false;
-        stop.textContent = 'Stop recording';
+        stop.textContent = t('active.stop');
         return;
       }
       await render();
@@ -338,7 +340,7 @@ function renderMessage(message: string, withSignOut = false): void {
   clear();
   view.append(el('p', { className: 'hint', textContent: message }));
   if (withSignOut) {
-    const signOut = el('button', { className: 'secondary', textContent: 'Sign out' });
+    const signOut = el('button', { className: 'secondary', textContent: t('common.signOut') });
     signOut.addEventListener('click', () => void doSignOut());
     view.append(signOut);
   }

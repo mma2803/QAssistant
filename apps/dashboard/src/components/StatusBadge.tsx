@@ -2,6 +2,7 @@ import type { TestType } from '@qassistant/shared';
 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n';
 import { integrationStatusLabel } from '@/lib/format';
 
 type Variant = React.ComponentProps<typeof Badge>['variant'];
@@ -13,6 +14,9 @@ const VARIANT_BY_STATUS: Record<string, Variant> = {
   completed: 'secondary',
   inactive: 'outline',
   disabled: 'outline',
+  // signup-link lifecycle
+  expired: 'outline',
+  revoked: 'destructive',
   // review status
   approved: 'success',
   draft: 'warning',
@@ -25,20 +29,24 @@ const VARIANT_BY_STATUS: Record<string, Variant> = {
 };
 
 export function StatusBadge({ status }: { status: string }): JSX.Element {
-  return <Badge variant={VARIANT_BY_STATUS[status] ?? 'secondary'}>{status}</Badge>;
+  const { t } = useI18n();
+  const translated = t(`status.${status}`);
+  const label = translated === `status.${status}` ? status : translated;
+  return <Badge variant={VARIANT_BY_STATUS[status] ?? 'secondary'}>{label}</Badge>;
 }
 
-/** Integration status with the human label from format.ts. */
+/** Integration status with a localized human label (falls back to format.ts). */
 export function IntegrationBadge({ status }: { status: string }): JSX.Element {
-  return (
-    <Badge variant={VARIANT_BY_STATUS[status] ?? 'secondary'}>
-      {integrationStatusLabel(status)}
-    </Badge>
-  );
+  const { t } = useI18n();
+  const key = `ui.integration_${status}`;
+  const translated = t(key);
+  const label = translated === key ? integrationStatusLabel(status) : translated;
+  return <Badge variant={VARIANT_BY_STATUS[status] ?? 'secondary'}>{label}</Badge>;
 }
 
 /** UI vs back-end test type, in distinct colors. */
 export function TestTypeBadge({ type }: { type: TestType }): JSX.Element {
+  const { t } = useI18n();
   const isBackend = type === 'backend';
   return (
     <span
@@ -49,7 +57,7 @@ export function TestTypeBadge({ type }: { type: TestType }): JSX.Element {
           : 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
       )}
     >
-      {isBackend ? 'Back-end' : 'UI'}
+      {isBackend ? t('ui.testBackend') : t('ui.testUi')}
     </span>
   );
 }

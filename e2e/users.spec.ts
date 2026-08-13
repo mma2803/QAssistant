@@ -10,7 +10,7 @@ test('creates, changes, disables, and resets a tenant user', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
   await page.getByRole('button', { name: 'Add user' }).click();
   await page.getByLabel('Email').fill('new.qa@example.test');
-  await page.getByLabel('Initial password').fill('temporary-password');
+  await page.getByLabel('Initial password').fill('Temporary-password-1');
   await chooseOption(page, 'Role', 'Admin');
   await page.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByRole('cell', { name: 'new.qa@example.test' })).toBeVisible();
@@ -24,16 +24,16 @@ test('creates, changes, disables, and resets a tenant user', async ({ page }) =>
   await qaRow.getByRole('button', { name: 'Actions' }).click();
   await page.getByRole('menuitem', { name: 'Disable' }).click();
 
-  page.once('dialog', (dialog) => dialog.accept('replacement-password'));
+  page.once('dialog', (dialog) => dialog.accept('Replacement-password-1'));
   await qaRow.getByRole('button', { name: 'Actions' }).click();
   await page.getByRole('menuitem', { name: 'Reset password' }).click();
 
   expect(requests).toContainEqual(expect.objectContaining({
     method: 'POST',
     pathname: '/api/v1/users',
-    body: { email: 'new.qa@example.test', password: 'temporary-password', role: 'admin' },
+    body: { email: 'new.qa@example.test', password: 'Temporary-password-1', role: 'admin' },
   }));
   expect(requests).toContainEqual(expect.objectContaining({ method: 'PATCH', pathname: `/api/v1/users/${ids.qa}`, body: { role: 'admin' } }));
   expect(requests).toContainEqual(expect.objectContaining({ method: 'PATCH', pathname: `/api/v1/users/${ids.qa}`, body: { status: 'disabled' } }));
-  expect(requests).toContainEqual(expect.objectContaining({ method: 'POST', pathname: `/api/v1/users/${ids.qa}/reset-password`, body: { password: 'replacement-password' } }));
+  expect(requests).toContainEqual(expect.objectContaining({ method: 'POST', pathname: `/api/v1/users/${ids.qa}/reset-password`, body: { password: 'Replacement-password-1' } }));
 });

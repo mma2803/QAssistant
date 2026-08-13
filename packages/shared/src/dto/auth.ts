@@ -3,6 +3,28 @@ import { uuid, nonEmptyString } from '../common.js';
 import { ROLES, TOKEN_ROLES } from '../enums.js';
 import { tenantSchema, projectSchema } from '../entities.js';
 
+/**
+ * Human-readable summary of the password complexity policy, reused by the API
+ * error message and the dashboard's inline hint so they never drift.
+ */
+export const PASSWORD_REQUIREMENTS =
+  'At least 8 characters, including an uppercase letter, a lowercase letter, a number, and a special character.';
+
+/**
+ * Password complexity policy applied everywhere a password is *set* (tenant /
+ * first-admin / user creation, admin reset, signup-link redemption, and
+ * self-service change). Login intentionally stays a plain non-empty string
+ * (see loginRequestSchema) so existing accounts with older passwords can still
+ * sign in; the policy governs new passwords only.
+ */
+export const passwordSchema = z
+  .string()
+  .min(8, PASSWORD_REQUIREMENTS)
+  .regex(/[a-z]/, PASSWORD_REQUIREMENTS)
+  .regex(/[A-Z]/, PASSWORD_REQUIREMENTS)
+  .regex(/[0-9]/, PASSWORD_REQUIREMENTS)
+  .regex(/[^A-Za-z0-9]/, PASSWORD_REQUIREMENTS);
+
 /** Identity derived from the verified Identity Platform ID token (contract section 1). */
 export const authContextSchema = z.object({
   uid: z.string(),
@@ -47,7 +69,7 @@ export type LogoutRequest = z.infer<typeof logoutRequestSchema>;
 
 /** POST /auth/complete-password-change */
 export const completePasswordChangeRequestSchema = z.object({
-  newPassword: z.string().min(8),
+  newPassword: passwordSchema,
 });
 export type CompletePasswordChangeRequest = z.infer<typeof completePasswordChangeRequestSchema>;
 
@@ -66,5 +88,3 @@ export type AuthMeResponse = z.infer<typeof authMeResponseSchema>;
 
 /** Shared role assignment input (admin user management). */
 export const roleSchema = z.enum(ROLES);
-
-export const passwordSchema = nonEmptyString.min(8);

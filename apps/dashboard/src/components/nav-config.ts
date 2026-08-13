@@ -13,6 +13,7 @@ import type { Role } from '@/auth/AuthContext';
 
 export type NavItem = {
   to: string;
+  /** i18n key (see i18n/translations `nav.*`); translated at render time. */
   label: string;
   icon: LucideIcon;
   /** Which roles see this link. */
@@ -25,13 +26,13 @@ export type NavItem = {
  * productivity + user management on top of the shared QA views.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/tenants', label: 'Tenants', icon: Building2, roles: ['super-admin'] },
-  { to: '/overview', label: 'Overview', icon: LayoutDashboard, roles: ['admin', 'qa-engineer'] },
-  { to: '/sessions', label: 'Recordings', icon: Video, roles: ['admin', 'qa-engineer'] },
-  { to: '/projects', label: 'Project context', icon: FolderKanban, roles: ['admin', 'qa-engineer'] },
-  { to: '/metrics', label: 'Productivity', icon: TrendingUp, roles: ['admin'] },
-  { to: '/users', label: 'Users', icon: Users, roles: ['admin'] },
-  { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'qa-engineer'] },
+  { to: '/tenants', label: 'nav.tenants', icon: Building2, roles: ['super-admin'] },
+  { to: '/overview', label: 'nav.overview', icon: LayoutDashboard, roles: ['admin', 'qa-engineer'] },
+  { to: '/sessions', label: 'nav.recordings', icon: Video, roles: ['admin', 'qa-engineer'] },
+  { to: '/projects', label: 'nav.projects', icon: FolderKanban, roles: ['admin', 'qa-engineer'] },
+  { to: '/metrics', label: 'nav.productivity', icon: TrendingUp, roles: ['admin'] },
+  { to: '/users', label: 'nav.users', icon: Users, roles: ['admin'] },
+  { to: '/settings', label: 'nav.settings', icon: Settings, roles: ['admin', 'qa-engineer'] },
 ];
 
 export function navItemsForRole(role: Role | null): NavItem[] {

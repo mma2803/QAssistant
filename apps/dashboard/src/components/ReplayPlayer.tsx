@@ -6,6 +6,7 @@ import 'rrweb/dist/style.css';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n';
 
 const HOST_CLASS = 'min-h-90 overflow-hidden rounded-lg border bg-white';
 
@@ -44,6 +45,7 @@ function fmt(ms: number): string {
 }
 
 export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
+  const { t } = useI18n();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const replayerRef = useRef<Replayer | null>(null);
@@ -116,7 +118,7 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
         rafRef.current = requestAnimationFrame(tick);
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : 'Failed to load replay player');
+        setError(e instanceof Error ? e.message : t('ui.replayFailedToLoad'));
       });
 
     return () => {
@@ -171,10 +173,8 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
     return (
       <div className={cn(HOST_CLASS, 'grid place-items-center')}>
         <div className="text-muted-foreground p-4 text-center text-sm">
-          <div className="text-foreground">DOM-replay is captured for this recording.</div>
-          <div className="mt-1.5">
-            Use Export to download the replayable DOM chunks and screenshots.
-          </div>
+          <div className="text-foreground">{t('ui.replayCaptured')}</div>
+          <div className="mt-1.5">{t('ui.replayUseExport')}</div>
         </div>
       </div>
     );
@@ -188,7 +188,12 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
     <div className={HOST_CLASS} ref={hostRef}>
       <div ref={stageRef} className="overflow-hidden bg-white" />
       <div className="bg-card flex items-center gap-3 border-t px-3 py-2">
-        <Button variant="ghost" size="icon" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggle}
+          aria-label={playing ? t('ui.replayPause') : t('ui.replayPlay')}
+        >
           {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
         </Button>
         <input
@@ -199,7 +204,7 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
           value={Math.min(current, total || 0)}
           onChange={(e) => seek(Number(e.target.value))}
           className="accent-primary flex-1"
-          aria-label="Seek"
+          aria-label={t('ui.replaySeek')}
         />
         <span className="text-muted-foreground min-w-20 text-right text-xs tabular-nums">
           {fmt(current)} / {fmt(total)}
@@ -218,7 +223,13 @@ export function ReplayPlayer({ events }: { events?: unknown[] }): JSX.Element {
             </Button>
           ))}
         </div>
-        <Button variant="ghost" size="icon" onClick={fullscreen} aria-label="Fullscreen" title="Fullscreen">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={fullscreen}
+          aria-label={t('ui.replayFullscreen')}
+          title={t('ui.replayFullscreen')}
+        >
           <Maximize2 className="size-4" />
         </Button>
       </div>

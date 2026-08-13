@@ -106,10 +106,10 @@ test('extension popup enforces and completes password change', async ({ page }) 
   await page.getByLabel('New password').fill('short');
   await page.getByLabel('Confirm').fill('short');
   await page.getByRole('button', { name: 'Set new password' }).click();
-  await expect(page.getByText('Password must be at least 8 characters')).toBeVisible();
+  await expect(page.getByText(/at least 8 characters/i)).toBeVisible();
 
-  await page.getByLabel('New password').fill('new-password-123');
-  await page.getByLabel('Confirm').fill('new-password-123');
+  await page.getByLabel('New password').fill('New-password-123');
+  await page.getByLabel('Confirm').fill('New-password-123');
   await page.getByRole('button', { name: 'Set new password' }).click();
   await expect(page.getByRole('button', { name: 'Start recording' })).toBeVisible();
 });

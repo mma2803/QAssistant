@@ -17,6 +17,7 @@ import type { DashboardSessionListItem, Project } from '@qassistant/shared';
 import { api } from '@/lib/api';
 import { useAsync } from '@/lib/useAsync';
 import { formatDuration } from '@/lib/format';
+import { useI18n } from '@/i18n';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -38,12 +39,12 @@ import {
 
 type Period = '24h' | '48h' | '7d' | '30d' | 'custom';
 
-const PERIOD_LABEL: Record<Period, string> = {
-  '24h': 'Last 24 hours',
-  '48h': 'Last 48 hours',
-  '7d': 'Last 7 days',
-  '30d': 'Last 30 days',
-  custom: 'Custom range',
+const PERIOD_LABEL_KEY: Record<Period, string> = {
+  '24h': 'metrics.window24h',
+  '48h': 'metrics.window48h',
+  '7d': 'metrics.window7d',
+  '30d': 'metrics.window30d',
+  custom: 'metrics.windowCustom',
 };
 
 const HOUR = 3600 * 1000;
@@ -127,6 +128,7 @@ function medal(rank: number): string | null {
  * recording count) with no hidden weighted score.
  */
 export function MetricsPage(): JSX.Element {
+  const { t } = useI18n();
   const [period, setPeriod] = useState<Period>('7d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -168,7 +170,7 @@ export function MetricsPage(): JSX.Element {
         }
         if (!cancelled) setItems(acc);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load metrics');
+        if (!cancelled) setError(err instanceof Error ? err.message : t('metrics.loadFailed'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -260,11 +262,11 @@ export function MetricsPage(): JSX.Element {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="24h">Last 24 hours</SelectItem>
-          <SelectItem value="48h">Last 48 hours</SelectItem>
-          <SelectItem value="7d">Last 7 days</SelectItem>
-          <SelectItem value="30d">Last 30 days</SelectItem>
-          <SelectItem value="custom">Custom range</SelectItem>
+          <SelectItem value="24h">{t('metrics.window24h')}</SelectItem>
+          <SelectItem value="48h">{t('metrics.window48h')}</SelectItem>
+          <SelectItem value="7d">{t('metrics.window7d')}</SelectItem>
+          <SelectItem value="30d">{t('metrics.window30d')}</SelectItem>
+          <SelectItem value="custom">{t('metrics.windowCustom')}</SelectItem>
         </SelectContent>
       </Select>
       {period === 'custom' && (
@@ -290,23 +292,23 @@ export function MetricsPage(): JSX.Element {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Productivity" actions={periodFilter} />
+      <PageHeader title={t('metrics.title')} actions={periodFilter} />
 
-      <p className="text-primary text-sm font-medium">{PERIOD_LABEL[period]}</p>
+      <p className="text-primary text-sm font-medium">{t(PERIOD_LABEL_KEY[period])}</p>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Active testers" value={totals.testers} icon={Users} />
+        <StatCard label={t('metrics.activeTesters')} value={totals.testers} icon={Users} />
         <StatCard
-          label="Generated tests"
+          label={t('metrics.generatedTests')}
           value={totals.tests}
-          sub={`${totals.avgTests} avg / tester`}
+          sub={t('metrics.avgPerTester', { avg: totals.avgTests })}
           icon={FileCode2}
         />
-        <StatCard label="Recordings" value={totals.recordings} icon={Video} />
+        <StatCard label={t('metrics.recordings')} value={totals.recordings} icon={Video} />
         <StatCard
-          label="Total recording time"
+          label={t('metrics.totalRecordingTime')}
           value={formatDuration(totals.seconds)}
-          sub="Raw wall-clock"
+          sub={t('metrics.rawWallClock')}
           icon={Clock}
         />
       </div>
@@ -316,34 +318,34 @@ export function MetricsPage(): JSX.Element {
       {loading ? (
         <Card>
           <CardContent className="text-muted-foreground py-12 text-center text-sm">
-            Loading…
+            {t('common.loading')}
           </CardContent>
         </Card>
       ) : empty ? (
         <Card>
           <CardContent className="text-muted-foreground py-12 text-center text-sm">
-            No activity in this period.
+            {t('metrics.noActivity')}
           </CardContent>
         </Card>
       ) : (
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Test coverage</CardTitle>
+              <CardTitle>{t('metrics.coverageTitle')}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-6 sm:grid-cols-3">
               <CoverageTile
-                label="Recordings turned into a test"
+                label={t('metrics.coverageRecordingsWithTest')}
                 value={coverage.withTests}
                 total={coverage.totalRec}
               />
               <CoverageTile
-                label="Candidate tests integrated"
+                label={t('metrics.coverageCandidatesIntegrated')}
                 value={coverage.integrated}
                 total={coverage.candidates}
               />
               <CoverageTile
-                label="Projects with activity"
+                label={t('metrics.coverageProjectsWithActivity')}
                 value={coverage.projectsWithRec}
                 total={coverage.activeProjects}
               />
@@ -353,7 +355,7 @@ export function MetricsPage(): JSX.Element {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Top testers</CardTitle>
+                <CardTitle>{t('metrics.topTesters')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={Math.max(180, byTester.length * 40)}>
@@ -373,7 +375,7 @@ export function MetricsPage(): JSX.Element {
                       stroke="var(--muted-foreground)"
                     />
                     <Tooltip cursor={{ fill: 'var(--accent)' }} contentStyle={tooltipStyle} />
-                    <Bar dataKey="tests" name="Generated tests" radius={[0, 4, 4, 0]} barSize={18}>
+                    <Bar dataKey="tests" name={t('metrics.generatedTests')} radius={[0, 4, 4, 0]} barSize={18}>
                       {byTester.map((_, i) => (
                         <Cell
                           key={i}
@@ -389,12 +391,12 @@ export function MetricsPage(): JSX.Element {
 
             <Card>
               <CardHeader>
-                <CardTitle>Project activity</CardTitle>
+                <CardTitle>{t('metrics.projectActivity')}</CardTitle>
               </CardHeader>
               <CardContent>
                 {byProject.length === 0 ? (
                   <p className="text-muted-foreground py-8 text-center text-sm">
-                    No recordings in this period.
+                    {t('metrics.noRecordings')}
                   </p>
                 ) : (
                   <ResponsiveContainer width="100%" height={Math.max(180, byProject.length * 48)}>
@@ -423,8 +425,8 @@ export function MetricsPage(): JSX.Element {
                       />
                       <Tooltip cursor={{ fill: 'var(--accent)' }} contentStyle={tooltipStyle} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="recordings" name="Recordings" fill="var(--chart-2)" radius={[0, 4, 4, 0]} barSize={10} />
-                      <Bar dataKey="tests" name="Generated tests" fill="var(--chart-1)" radius={[0, 4, 4, 0]} barSize={10} />
+                      <Bar dataKey="recordings" name={t('metrics.recordings')} fill="var(--chart-2)" radius={[0, 4, 4, 0]} barSize={10} />
+                      <Bar dataKey="tests" name={t('metrics.generatedTests')} fill="var(--chart-1)" radius={[0, 4, 4, 0]} barSize={10} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -436,18 +438,18 @@ export function MetricsPage(): JSX.Element {
             <CardHeader className="px-6 pt-6">
               <CardTitle className="flex items-center gap-2">
                 <Trophy className="text-warning size-4" />
-                Contribution ranking
+                {t('metrics.rankingTitle')}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-0 pb-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-14">Rank</TableHead>
-                    <TableHead>Tester</TableHead>
-                    <TableHead className="text-right">Generated tests</TableHead>
-                    <TableHead className="text-right">Recording time</TableHead>
-                    <TableHead className="text-right">Recordings</TableHead>
+                    <TableHead className="w-14">{t('metrics.colRank')}</TableHead>
+                    <TableHead>{t('metrics.colTester')}</TableHead>
+                    <TableHead className="text-right">{t('metrics.generatedTests')}</TableHead>
+                    <TableHead className="text-right">{t('metrics.colRecordingTime')}</TableHead>
+                    <TableHead className="text-right">{t('metrics.recordings')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -471,11 +473,7 @@ export function MetricsPage(): JSX.Element {
             </CardContent>
           </Card>
 
-          <p className="text-muted-foreground text-xs">
-            Directional, not an absolute performance score. Recording duration is raw wall-clock
-            (idle time is not excluded in this MVP). Aggregated from recordings in the selected
-            window.
-          </p>
+          <p className="text-muted-foreground text-xs">{t('metrics.footnote')}</p>
         </>
       )}
     </div>

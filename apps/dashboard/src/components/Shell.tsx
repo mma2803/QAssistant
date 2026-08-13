@@ -10,9 +10,13 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 
+import { passwordSchema } from '@qassistant/shared';
+
 import { useAuth } from '@/auth/AuthContext';
+import { useI18n } from '@/i18n';
 import { BugMark } from '@/components/Logo';
 import { navItemsForRole, type NavItem } from '@/components/nav-config';
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -39,10 +43,6 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/s
 import { cn } from '@/lib/utils';
 
 const COLLAPSE_KEY = 'qassistant.sidebar.collapsed';
-
-function roleLabel(isSuperAdmin: boolean, isAdmin: boolean): string {
-  return isSuperAdmin ? 'Super-admin' : isAdmin ? 'Admin' : 'QA engineer';
-}
 
 function initials(uid: string | null | undefined): string {
   if (!uid) return '?';
@@ -74,6 +74,7 @@ function NavItems({
   collapsed?: boolean;
   onNavigate?: () => void;
 }): JSX.Element {
+  const { t } = useI18n();
   return (
     <nav className={cn('flex flex-col gap-1 py-2', collapsed ? 'px-2' : 'px-3')}>
       {items.map(({ to, label, icon: Icon }) => (
@@ -81,7 +82,7 @@ function NavItems({
           key={to}
           to={to}
           onClick={onNavigate}
-          title={collapsed ? label : undefined}
+          title={collapsed ? t(label) : undefined}
           className={({ isActive }) =>
             cn(
               'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
@@ -92,7 +93,7 @@ function NavItems({
           }
         >
           <Icon className="size-4 shrink-0" />
-          {!collapsed && label}
+          {!collapsed && t(label)}
         </NavLink>
       ))}
     </nav>
@@ -107,8 +108,8 @@ function NavItems({
  */
 export function Shell({ children }: { children: ReactNode }): JSX.Element {
   const { me, role, email, signOut, completePasswordChange } = useAuth();
-  const isAdmin = role === 'admin';
-  const isSuperAdmin = role === 'super-admin';
+  const { t } = useI18n();
+  const roleText = t(`roles.${role ?? 'qa-engineer'}`);
   const items = navItemsForRole(role);
   // Prefer the email (server-provided, or remembered from sign-in) over the
   // opaque uid for display.
@@ -132,12 +133,12 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
   async function onChangePassword(e: FormEvent): Promise<void> {
     e.preventDefault();
     setPwError(null);
-    if (pw1.length < 8) {
-      setPwError('Password must be at least 8 characters');
+    if (!passwordSchema.safeParse(pw1).success) {
+      setPwError(t('password.requirements'));
       return;
     }
     if (pw1 !== pw2) {
-      setPwError('Passwords do not match');
+      setPwError(t('password.mismatch'));
       return;
     }
     setPwBusy(true);
@@ -146,9 +147,9 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
       setPwOpen(false);
       setPw1('');
       setPw2('');
-      toast.success('Password updated');
+      toast.success(t('shell.passwordUpdated'));
     } catch (err) {
-      setPwError(err instanceof Error ? err.message : 'Could not change password');
+      setPwError(err instanceof Error ? err.message : t('passwordChange.failed'));
     } finally {
       setPwBusy(false);
     }
@@ -162,7 +163,7 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           {collapsed ? (
-            <Button variant="ghost" size="icon" className="mx-auto" aria-label="Open account menu">
+            <Button variant="ghost" size="icon" className="mx-auto" aria-label={t('shell.openAccountMenu')}>
               <Avatar className="size-7">
                 <AvatarFallback>{initials(displayName)}</AvatarFallback>
               </Avatar>
@@ -171,17 +172,17 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
             <Button
               variant="ghost"
               className="h-auto w-full justify-start gap-2 px-2 py-2"
-              aria-label="Open account menu"
+              aria-label={t('shell.openAccountMenu')}
             >
               <Avatar className="size-8">
                 <AvatarFallback>{initials(displayName)}</AvatarFallback>
               </Avatar>
               <div className="flex min-w-0 flex-1 flex-col items-start text-left">
                 <span className="w-full truncate text-sm font-medium">
-                  {displayName ?? 'Account'}
+                  {displayName ?? t('shell.account')}
                 </span>
                 <span className="text-muted-foreground w-full truncate text-xs">
-                  {roleLabel(isSuperAdmin, isAdmin)}
+                  {roleText}
                   {me?.tenant?.name ? ` · ${me.tenant.name}` : ''}
                 </span>
               </div>
@@ -197,7 +198,7 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
           <DropdownMenuLabel className="flex flex-col gap-0.5">
             <span className="truncate">{displayName}</span>
             <span className="text-muted-foreground text-xs font-normal">
-              {roleLabel(isSuperAdmin, isAdmin)}
+              {roleText}
               {me?.tenant?.name ? ` · ${me.tenant.name}` : ''}
             </span>
           </DropdownMenuLabel>
@@ -210,12 +211,12 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
             }}
           >
             <KeyRound className="size-4" />
-            Change password
+            {t('shell.changePassword')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => void signOut()}>
             <LogOut className="size-4" />
-            Sign out
+            {t('shell.signOut')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -251,12 +252,12 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+              <Button variant="ghost" size="icon" className="md:hidden" aria-label={t('shell.openMenu')}>
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex w-64 flex-col p-0">
-              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <SheetTitle className="sr-only">{t('shell.navigation')}</SheetTitle>
               <Brand />
               <Separator />
               <div className="flex-1 overflow-y-auto">
@@ -272,14 +273,15 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
             variant="ghost"
             size="icon"
             className="hidden md:inline-flex"
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={collapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
+            title={collapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
             onClick={() => setCollapsed((c) => !c)}
           >
             {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
           </Button>
 
           <div className="flex-1" />
+          <LanguageToggle />
           <ModeToggle />
         </header>
 
@@ -292,15 +294,15 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
       <Dialog open={pwOpen} onOpenChange={setPwOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Change password</DialogTitle>
+            <DialogTitle>{t('shell.changePassword')}</DialogTitle>
             <DialogDescription>
-              {displayName ? `Signed in as ${displayName}.` : ''} Set a new password for your
-              account.
+              {displayName ? `${t('shell.signedInAs', { name: displayName })} ` : ''}
+              {t('shell.changePwDesc')}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={onChangePassword}>
             <div className="space-y-2">
-              <Label htmlFor="new-pw">New password</Label>
+              <Label htmlFor="new-pw">{t('password.newPassword')}</Label>
               <Input
                 id="new-pw"
                 type="password"
@@ -309,9 +311,10 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
                 onChange={(e) => setPw1(e.target.value)}
                 required
               />
+              <p className="text-muted-foreground text-xs">{t('password.requirements')}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirm-pw">Confirm password</Label>
+              <Label htmlFor="confirm-pw">{t('password.confirmPassword')}</Label>
               <Input
                 id="confirm-pw"
                 type="password"
@@ -324,10 +327,10 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
             {pwError && <p className="text-destructive text-sm">{pwError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setPwOpen(false)}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button type="submit" disabled={pwBusy}>
-                {pwBusy ? 'Saving…' : 'Update password'}
+                {pwBusy ? t('common.saving') : t('shell.updatePassword')}
               </Button>
             </DialogFooter>
           </form>

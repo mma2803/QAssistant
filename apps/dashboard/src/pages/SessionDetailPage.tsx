@@ -5,6 +5,7 @@ import { ArrowLeft, Download } from 'lucide-react';
 import type { GeneratedTest, GenerateRequest, TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 
+import { useI18n } from '@/i18n';
 import { api, saveBlob } from '@/lib/api';
 import { useAsync } from '@/lib/useAsync';
 import { ReplayPlayer } from '@/components/ReplayPlayer';
@@ -55,6 +56,7 @@ function Meta({ label, children }: { label: string; children: React.ReactNode })
  * recordings (the backend 404s otherwise), so the same page serves spec 5.3.
  */
 export function SessionDetailPage(): JSX.Element {
+  const { t } = useI18n();
   const { sessionId = '' } = useParams();
   const detail = useAsync(() => api.getSession(sessionId), [sessionId]);
   const replay = useAsync(() => api.getReplay(sessionId), [sessionId]);
@@ -91,16 +93,17 @@ export function SessionDetailPage(): JSX.Element {
           return;
         }
       }
-      toast.error('Generation is taking longer than expected — refresh in a moment.');
+      toast.error(t('sessionDetail.generationTakingLong'));
       detail.reload();
     } finally {
       setBusyId(null);
     }
   }
 
-  if (detail.loading) return <p className="text-muted-foreground text-sm">Loading recording…</p>;
+  if (detail.loading)
+    return <p className="text-muted-foreground text-sm">{t('sessionDetail.loading')}</p>;
   if (detail.error) return <p className="text-destructive text-sm">{detail.error}</p>;
-  if (!detail.data) return <p className="text-muted-foreground text-sm">Not found.</p>;
+  if (!detail.data) return <p className="text-muted-foreground text-sm">{t('sessionDetail.notFound')}</p>;
 
   const {
     session,
@@ -123,18 +126,18 @@ export function SessionDetailPage(): JSX.Element {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Recording"
+        title={t('sessionDetail.title')}
         actions={
           <>
             <Button asChild variant="outline">
               <Link to="/sessions">
                 <ArrowLeft className="size-4" />
-                Back
+                {t('sessionDetail.back')}
               </Link>
             </Button>
             <Button onClick={() => void onExport()}>
               <Download className="size-4" />
-              Export ZIP
+              {t('sessionDetail.exportZip')}
             </Button>
           </>
         }
@@ -142,47 +145,44 @@ export function SessionDetailPage(): JSX.Element {
 
       <Card>
         <CardContent className="flex flex-wrap gap-8">
-          <Meta label="Project">{projectName}</Meta>
-          <Meta label="Recorded by">{recordedByEmail ?? '—'}</Meta>
-          <Meta label="Status">
+          <Meta label={t('sessionDetail.project')}>{projectName}</Meta>
+          <Meta label={t('sessionDetail.recordedBy')}>{recordedByEmail ?? '—'}</Meta>
+          <Meta label={t('common.status')}>
             <StatusBadge status={session.status} />
           </Meta>
-          <Meta label="Started">{formatDateTime(session.startedAt)}</Meta>
-          <Meta label="Duration">{formatDuration(durationSeconds)}</Meta>
+          <Meta label={t('sessionDetail.started')}>{formatDateTime(session.startedAt)}</Meta>
+          <Meta label={t('sessionDetail.duration')}>{formatDuration(durationSeconds)}</Meta>
           {session.jiraId && (
-            <Meta label="Jira">{`${session.jiraId} (${session.jiraStatus ?? '?'})`}</Meta>
+            <Meta label={t('sessionDetail.jira')}>{`${session.jiraId} (${session.jiraStatus ?? '?'})`}</Meta>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Summary</CardTitle>
+          <CardTitle>{t('sessionDetail.summary')}</CardTitle>
         </CardHeader>
         <CardContent>
           {session.summary ? (
             <p className="text-sm">{session.summary}</p>
           ) : (
-            <p className="text-muted-foreground text-sm">
-              No summary yet (generated automatically on stop).
-            </p>
+            <p className="text-muted-foreground text-sm">{t('sessionDetail.noSummary')}</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>DOM-replay</CardTitle>
+          <CardTitle>{t('sessionDetail.domReplay')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-muted-foreground text-sm">
-            {domChunks.length} DOM chunk(s) captured.
-            {replay.data?.truncated &&
-              ' Showing the first part of a long recording; use Export for the full stream.'}
+            {t('sessionDetail.domChunks', { count: domChunks.length })}
+            {replay.data?.truncated && t('sessionDetail.domTruncated')}
           </p>
           {replay.loading ? (
             <div className="text-muted-foreground grid min-h-90 place-items-center rounded-lg border text-sm">
-              Loading replay…
+              {t('sessionDetail.loadingReplay')}
             </div>
           ) : replay.error ? (
             <div className="text-destructive rounded-lg border p-4 text-sm">{replay.error}</div>
@@ -195,7 +195,7 @@ export function SessionDetailPage(): JSX.Element {
       {screenshots.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Screenshots</CardTitle>
+            <CardTitle>{t('sessionDetail.screenshots')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -207,7 +207,7 @@ export function SessionDetailPage(): JSX.Element {
                   <AuthImage
                     sessionId={sessionId}
                     artifactId={s.id}
-                    alt={`screenshot ${s.seq + 1}`}
+                    alt={t('sessionDetail.screenshotAlt', { n: s.seq + 1 })}
                     zoomable
                   />
                 </div>
@@ -219,18 +219,18 @@ export function SessionDetailPage(): JSX.Element {
 
       <Card>
         <CardHeader>
-          <CardTitle>Flags &amp; selections</CardTitle>
+          <CardTitle>{t('sessionDetail.flagsSelections')}</CardTitle>
         </CardHeader>
         <CardContent className="px-0">
           {flags.length === 0 ? (
-            <p className="text-muted-foreground px-6 text-sm">No flagged selectors.</p>
+            <p className="text-muted-foreground px-6 text-sm">{t('sessionDetail.noFlags')}</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Selector</TableHead>
-                  <TableHead>Note</TableHead>
-                  <TableHead>Offset</TableHead>
+                  <TableHead>{t('sessionDetail.colSelector')}</TableHead>
+                  <TableHead>{t('sessionDetail.colNote')}</TableHead>
+                  <TableHead>{t('sessionDetail.colOffset')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -290,6 +290,7 @@ interface GenSectionProps {
  * owns the Git push) sets an integration outcome — there is no integrate action.
  */
 function GenerationsSection(props: GenSectionProps): JSX.Element {
+  const { t } = useI18n();
   const { generations, comments, busyId } = props;
   const [comment, setComment] = useState('');
   const [target, setTarget] = useState<string>('');
@@ -330,57 +331,64 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
   const defaultLabel = `${effectiveFramework} / ${effectiveLanguage}`;
   const effectiveTestType: TestType =
     project.data?.defaultTestType ?? tenant.data?.defaultTestType ?? 'ui';
-  const testTypeLabel = effectiveTestType === 'backend' ? 'Back-end' : 'UI';
+  const testTypeLabel =
+    effectiveTestType === 'backend'
+      ? t('sessionDetail.testTypeBackend')
+      : t('sessionDetail.testTypeUi');
 
   return (
     <Card>
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-        <CardTitle>Generated tests</CardTitle>
+        <CardTitle>{t('sessionDetail.generatedTests')}</CardTitle>
         <div className="flex flex-wrap items-center gap-2">
           <Select
             value={ttChoice === '' ? DEFAULT : ttChoice}
             onValueChange={(v) => setTtChoice(v === DEFAULT ? '' : (v as TestType))}
           >
-            <SelectTrigger size="sm" aria-label="Test type">
+            <SelectTrigger size="sm" aria-label={t('sessionDetail.testType')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={DEFAULT}>Default ({testTypeLabel})</SelectItem>
-              <SelectItem value="ui">UI test</SelectItem>
-              <SelectItem value="backend">Back-end test</SelectItem>
+              <SelectItem value={DEFAULT}>
+                {t('sessionDetail.defaultOption', { label: testTypeLabel })}
+              </SelectItem>
+              <SelectItem value="ui">{t('sessionDetail.uiTest')}</SelectItem>
+              <SelectItem value="backend">{t('sessionDetail.backendTest')}</SelectItem>
             </SelectContent>
           </Select>
           <Select
             value={fwChoice === '' ? DEFAULT : fwChoice}
             onValueChange={(v) => setFwChoice(v === DEFAULT ? '' : v)}
           >
-            <SelectTrigger size="sm" aria-label="Test framework">
+            <SelectTrigger size="sm" aria-label={t('sessionDetail.testFramework')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={DEFAULT}>Default ({defaultLabel})</SelectItem>
+              <SelectItem value={DEFAULT}>
+                {t('sessionDetail.defaultOption', { label: defaultLabel })}
+              </SelectItem>
               {TEST_FRAMEWORK_PRESETS.map((p, i) => (
                 <SelectItem key={`${p.framework}-${p.language}`} value={String(i)}>
                   {p.framework} / {p.language}
                 </SelectItem>
               ))}
-              <SelectItem value={CUSTOM}>Custom…</SelectItem>
+              <SelectItem value={CUSTOM}>{t('sessionDetail.custom')}</SelectItem>
             </SelectContent>
           </Select>
           {fwChoice === CUSTOM && (
             <>
               <Input
-                aria-label="Custom framework"
+                aria-label={t('sessionDetail.customFramework')}
                 value={customFw}
                 onChange={(e) => setCustomFw(e.target.value)}
-                placeholder="Framework"
+                placeholder={t('sessionDetail.frameworkPlaceholder')}
                 className="h-8 w-32"
               />
               <Input
-                aria-label="Custom language"
+                aria-label={t('sessionDetail.customLanguage')}
                 value={customLang}
                 onChange={(e) => setCustomLang(e.target.value)}
-                placeholder="Language"
+                placeholder={t('sessionDetail.languagePlaceholder')}
                 className="h-8 w-32"
               />
             </>
@@ -390,13 +398,13 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
             disabled={busyId === 'gen' || customIncomplete}
             onClick={() => void props.onGenerate(selectedOverride())}
           >
-            {busyId === 'gen' ? 'Generating…' : 'Generate'}
+            {busyId === 'gen' ? t('sessionDetail.generating') : t('sessionDetail.generate')}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {generations.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No generations yet.</p>
+          <p className="text-muted-foreground text-sm">{t('sessionDetail.noGenerations')}</p>
         ) : (
           generations
             .slice()
@@ -430,20 +438,26 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
                     }
                     onClick={() => props.onApprove(g.id)}
                   >
-                    {g.integrationStatus === 'failed_to_integrate' ? 'Re-approve (retry)' : 'Approve'}
+                    {g.integrationStatus === 'failed_to_integrate'
+                      ? t('sessionDetail.reApprove')
+                      : t('sessionDetail.approve')}
                   </Button>
                 </div>
                 {g.integrationRef && (
-                  <p className="text-muted-foreground text-xs">Integration ref: {g.integrationRef}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {t('sessionDetail.integrationRef', { ref: g.integrationRef })}
+                  </p>
                 )}
                 {g.integrationError && (
                   <p className="text-muted-foreground text-xs">
-                    Integration error: {g.integrationError}
+                    {t('sessionDetail.integrationError', { error: g.integrationError })}
                   </p>
                 )}
                 {g.promptInputsSummary?.sources?.length > 0 && (
                   <p className="text-muted-foreground text-xs">
-                    Sources: {g.promptInputsSummary.sources.map((s) => s.label).join(', ')}
+                    {t('sessionDetail.sources', {
+                      list: g.promptInputsSummary.sources.map((s) => s.label).join(', '),
+                    })}
                   </p>
                 )}
                 <pre className="bg-muted max-h-[420px] overflow-auto rounded-md border p-3 text-xs leading-relaxed">
@@ -456,40 +470,40 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
         <Separator />
 
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold">Comments &amp; regenerate</h4>
+          <h4 className="text-sm font-semibold">{t('sessionDetail.commentsRegenerate')}</h4>
           {comments.length > 0 && (
             <ul className="list-disc space-y-1 pl-5 text-sm">
               {comments.map((c) => (
                 <li key={c.id}>
                   {c.body}{' '}
                   {c.generatedTestId && (
-                    <span className="text-muted-foreground text-xs">(on a version)</span>
+                    <span className="text-muted-foreground text-xs">{t('sessionDetail.onAVersion')}</span>
                   )}
                 </li>
               ))}
             </ul>
           )}
           <div className="space-y-2">
-            <Label htmlFor="gen-comment">Comment to steer the next generation</Label>
+            <Label htmlFor="gen-comment">{t('sessionDetail.commentLabel')}</Label>
             <Textarea
               id="gen-comment"
               rows={3}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="e.g. assert the success toast, use the data-test-id selectors"
+              placeholder={t('sessionDetail.commentPlaceholder')}
             />
           </div>
           <div className="max-w-xs space-y-2">
-            <Label>Target version (optional)</Label>
+            <Label>{t('sessionDetail.targetVersion')}</Label>
             <Select
               value={target === '' ? NONE : target}
               onValueChange={(v) => setTarget(v === NONE ? '' : v)}
             >
-              <SelectTrigger className="w-full" aria-label="Target version">
+              <SelectTrigger className="w-full" aria-label={t('sessionDetail.targetVersion')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>No specific version</SelectItem>
+                <SelectItem value={NONE}>{t('sessionDetail.noSpecificVersion')}</SelectItem>
                 {generations.map((g) => (
                   <SelectItem key={g.id} value={g.id}>
                     v{g.version}
@@ -507,13 +521,13 @@ function GenerationsSection(props: GenSectionProps): JSX.Element {
                 setComment('');
               }}
             >
-              Add comment
+              {t('sessionDetail.addComment')}
             </Button>
             <Button
               disabled={busyId === 'regen' || customIncomplete}
               onClick={() => void props.onRegenerate(undefined, selectedOverride())}
             >
-              {busyId === 'regen' ? 'Regenerating…' : 'Regenerate with comments'}
+              {busyId === 'regen' ? t('sessionDetail.regenerating') : t('sessionDetail.regenerate')}
             </Button>
           </div>
         </div>

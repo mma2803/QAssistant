@@ -19,7 +19,7 @@ test('super-admin manages tenants: list, create, and toggle status', async ({ pa
   await page.getByRole('button', { name: 'Add tenant' }).click();
   await page.getByLabel('Tenant name').fill('Globex Corp');
   await page.getByLabel('First admin email').fill('owner@globex.test');
-  await page.getByLabel('First admin initial password').fill('temporary-password');
+  await page.getByLabel('First admin initial password').fill('Temporary-password-1');
   await page.getByRole('button', { name: 'Create' }).click();
 
   await expect(page.getByText('Globex Corp')).toBeVisible();
@@ -29,7 +29,7 @@ test('super-admin manages tenants: list, create, and toggle status', async ({ pa
       pathname: '/api/v1/admin/tenants',
       body: {
         name: 'Globex Corp',
-        firstAdmin: { email: 'owner@globex.test', password: 'temporary-password' },
+        firstAdmin: { email: 'owner@globex.test', password: 'Temporary-password-1' },
       },
     }),
   );
@@ -43,6 +43,59 @@ test('super-admin manages tenants: list, create, and toggle status', async ({ pa
       method: 'PATCH',
       pathname: `/api/v1/admin/tenants/00000000-0000-4000-8000-000000000001`,
       body: { status: 'inactive' },
+    }),
+  );
+});
+
+test('super-admin creates a reusable signup link, then sees it listed', async ({ page }) => {
+  const requests: Array<{ method: string; pathname: string; body?: unknown }> = [];
+  await authenticate(page);
+  await installMockApi(page, { role: 'super-admin', onRequest: (r) => requests.push(r) });
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: 'Tenants' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Signup links' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Create signup link' }).click();
+  await page.getByLabel('Expires in (days)').fill('14');
+  await page.getByRole('button', { name: 'Generate link' }).click();
+
+  // The generated URL is shown exactly once, pointing at the public /signup route.
+  await expect(page.locator('input[readonly]')).toHaveValue(/\/signup\/mock-token-/);
+  expect(requests).toContainEqual(
+    expect.objectContaining({
+      method: 'POST',
+      pathname: '/api/v1/admin/tenants/invitations',
+      body: { expiresInDays: 14 },
+    }),
+  );
+
+  await page.getByRole('button', { name: 'Done' }).click();
+  // The link now appears in the Signup links table as active.
+  await expect(page.getByRole('row', { name: /active/ }).last()).toBeVisible();
+});
+
+test('super-admin deletes a tenant (soft-delete) via confirmation', async ({ page }) => {
+  const requests: Array<{ method: string; pathname: string }> = [];
+  await authenticate(page);
+  await installMockApi(page, { role: 'super-admin', onRequest: (r) => requests.push(r) });
+  await page.goto('/');
+
+  const acmeRow = page.getByRole('row', { name: /Acme QA/ });
+  await expect(acmeRow).toBeVisible();
+  await acmeRow.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+
+  // A confirmation dialog appears; confirm the delete.
+  await expect(page.getByRole('heading', { name: 'Delete tenant' })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete' }).click();
+
+  // The row is gone and the DELETE request was issued.
+  await expect(page.getByText('Acme QA')).toHaveCount(0);
+  expect(requests).toContainEqual(
+    expect.objectContaining({
+      method: 'DELETE',
+      pathname: '/api/v1/admin/tenants/00000000-0000-4000-8000-000000000001',
     }),
   );
 });

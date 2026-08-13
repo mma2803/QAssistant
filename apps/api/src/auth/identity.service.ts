@@ -58,10 +58,21 @@ export class IdentityService {
     });
   }
 
-  /** Create a tenant user, hash + store the admin-set initial password, arm mustChangePassword. */
+  /**
+   * Create a tenant user, hash + store the initial password. `mustChangePassword`
+   * defaults to true (admin-set temporary password the user must replace); the
+   * signup-link path passes false, since the first admin chose their own
+   * password in the redemption form (change: tenant-signup-links).
+   */
   async createTenantUser(
     db: Database,
-    params: { tenantId: string; email: string; password: string; role: Role },
+    params: {
+      tenantId: string;
+      email: string;
+      password: string;
+      role: Role;
+      mustChangePassword?: boolean;
+    },
   ): Promise<string> {
     const passwordHash = await this.password.hashPassword(params.password);
     const id = newId();
@@ -72,7 +83,7 @@ export class IdentityService {
       passwordHash,
       role: params.role,
       status: 'active',
-      mustChangePassword: true,
+      mustChangePassword: params.mustChangePassword ?? true,
     });
     return id;
   }

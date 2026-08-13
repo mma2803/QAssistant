@@ -28,6 +28,12 @@ import type {
   CreateTenantRequest,
   CreateTenantResponse,
   UpdateTenantRequest,
+  CreateInvitationRequest,
+  CreateInvitationResponse,
+  Invitation,
+  ValidateInvitationResponse,
+  RedeemInvitationRequest,
+  RedeemInvitationResponse,
 } from '@qassistant/shared';
 import { getAccessToken } from './auth-client';
 
@@ -84,6 +90,11 @@ async function request<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
+  return parseResponse<T>(res);
+}
+
+/** Shared response handling: 204 → undefined, error envelope → ApiError, JSON → T. */
+async function parseResponse<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
 
   const contentType = res.headers.get('content-type') ?? '';
@@ -104,6 +115,22 @@ async function request<T>(
     return (await res.json()) as T;
   }
   return undefined as T;
+}
+
+/**
+ * Unauthenticated request for the public tenant self-signup flow (no bearer
+ * token, never touches getAccessToken — the recipient is signed out). Same
+ * base URL and error envelope as the authenticated client.
+ */
+async function publicRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const res = await fetch(new URL(BASE + path, window.location.origin).toString(), {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return parseResponse<T>(res);
 }
 
 /** Download a binary response (the session export ZIP) as a Blob. */
@@ -214,6 +241,26 @@ export const api = {
     request<CreateTenantResponse>('POST', '/admin/tenants', body),
   updateTenantStatus: (tenantId: string, body: UpdateTenantRequest) =>
     request<Tenant>('PATCH', `/admin/tenants/${tenantId}`, body),
+  deleteTenant: (tenantId: string) => request<void>('DELETE', `/admin/tenants/${tenantId}`),
+
+  // --- reusable signup links (tenant-signup-links, super-admin only) ---
+  createInvitation: (body: CreateInvitationRequest) =>
+    request<CreateInvitationResponse>('POST', '/admin/tenants/invitations', body),
+  listInvitations: () => request<Invitation[]>('GET', '/admin/tenants/invitations'),
+  revokeInvitation: (invitationId: string) =>
+    request<void>('DELETE', `/admin/tenants/invitations/${invitationId}`),
+};
+
+/**
+ * Public (unauthenticated) client for the tenant self-signup page reached via a
+ * super-admin-issued link. Kept separate from `api` so it can never accidentally
+ * be called with, or depend on, a bearer token.
+ */
+export const publicApi = {
+  validateInvitation: (token: string) =>
+    publicRequest<ValidateInvitationResponse>('GET', `/signup/${encodeURIComponent(token)}`),
+  redeemInvitation: (body: RedeemInvitationRequest) =>
+    publicRequest<RedeemInvitationResponse>('POST', '/signup', body),
 };
 
 /** Trigger a browser download for a fetched blob. */

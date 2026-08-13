@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { MoreHorizontal, Plus, Search } from 'lucide-react';
-import type { Role, TenantUser } from '@qassistant/shared';
+import { passwordSchema, type Role, type TenantUser } from '@qassistant/shared';
 
+import { useI18n } from '@/i18n';
 import { api } from '@/lib/api';
 import { useAsync } from '@/lib/useAsync';
 import { formatDateTime } from '@/lib/format';
@@ -50,6 +51,7 @@ const ALL = '__all__';
  * by the backend role guard, so this is defense in depth, not the sole control.
  */
 export function UsersPage(): JSX.Element {
+  const { t } = useI18n();
   const users = useAsync<TenantUser[]>(() => api.listUsers(), []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -79,7 +81,7 @@ export function UsersPage(): JSX.Element {
       await fn();
       users.reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed');
+      setError(err instanceof Error ? err.message : t('common.requestFailed'));
     } finally {
       setBusy(false);
     }
@@ -107,19 +109,25 @@ export function UsersPage(): JSX.Element {
   }
 
   async function onReset(u: TenantUser): Promise<void> {
-    const pw = prompt(`New temporary password for ${u.email} (min 8 chars):`);
+    const pw = prompt(
+      t('users.resetPrompt', { email: u.email, requirements: t('password.requirements') }),
+    );
     if (!pw) return;
+    if (!passwordSchema.safeParse(pw).success) {
+      setError(t('password.requirements'));
+      return;
+    }
     await guard(() => api.resetPassword(u.id, { password: pw }));
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Users"
+        title={t('users.title')}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Add user
+            {t('users.addUser')}
           </Button>
         }
       />
@@ -130,7 +138,7 @@ export function UsersPage(): JSX.Element {
           <div className="relative min-w-56 flex-1">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
             <Input
-              placeholder="Search by email…"
+              placeholder={t('users.searchPlaceholder')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="pl-9"
@@ -141,12 +149,12 @@ export function UsersPage(): JSX.Element {
             onValueChange={(v) => setRoleFilter(v === ALL ? '' : (v as Role))}
           >
             <SelectTrigger className="w-44">
-              <SelectValue placeholder="All roles" />
+              <SelectValue placeholder={t('users.allRoles')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All roles</SelectItem>
-              <SelectItem value="qa-engineer">QA engineer</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value={ALL}>{t('users.allRoles')}</SelectItem>
+              <SelectItem value="qa-engineer">{t('roles.qa-engineer')}</SelectItem>
+              <SelectItem value="admin">{t('roles.admin')}</SelectItem>
             </SelectContent>
           </Select>
         </CardContent>
@@ -154,20 +162,22 @@ export function UsersPage(): JSX.Element {
 
       <Card className="py-0">
         <CardContent className="px-0">
-          {users.loading && <p className="text-muted-foreground p-6 text-sm">Loading users…</p>}
+          {users.loading && (
+            <p className="text-muted-foreground p-6 text-sm">{t('users.loading')}</p>
+          )}
           {users.data && rows.length === 0 && (
-            <p className="text-muted-foreground p-6 text-sm">No users match your filters.</p>
+            <p className="text-muted-foreground p-6 text-sm">{t('users.noMatch')}</p>
           )}
           {users.data && rows.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Must change pw</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-12 text-right">Actions</TableHead>
+                  <TableHead>{t('common.email')}</TableHead>
+                  <TableHead>{t('common.role')}</TableHead>
+                  <TableHead>{t('common.status')}</TableHead>
+                  <TableHead>{t('users.mustChangePassword')}</TableHead>
+                  <TableHead>{t('common.created')}</TableHead>
+                  <TableHead className="w-12 text-right">{t('common.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -184,8 +194,8 @@ export function UsersPage(): JSX.Element {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="qa-engineer">qa-engineer</SelectItem>
-                          <SelectItem value="admin">admin</SelectItem>
+                          <SelectItem value="qa-engineer">{t('roles.qa-engineer')}</SelectItem>
+                          <SelectItem value="admin">{t('roles.admin')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -193,7 +203,7 @@ export function UsersPage(): JSX.Element {
                       <StatusBadge status={u.status} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {u.mustChangePassword ? 'yes' : 'no'}
+                      {u.mustChangePassword ? t('users.mustChangeYes') : t('users.mustChangeNo')}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDateTime(u.createdAt)}
@@ -201,19 +211,24 @@ export function UsersPage(): JSX.Element {
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" disabled={busy} aria-label="Actions">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={busy}
+                            aria-label={t('common.actions')}
+                          >
                             <MoreHorizontal className="size-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => void onReset(u)}>
-                            Reset password
+                            {t('users.resetPassword')}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             variant={u.status === 'active' ? 'destructive' : 'default'}
                             onSelect={() => void onToggleStatus(u)}
                           >
-                            {u.status === 'active' ? 'Disable' : 'Enable'}
+                            {u.status === 'active' ? t('users.disable') : t('users.enable')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -230,14 +245,12 @@ export function UsersPage(): JSX.Element {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add user</DialogTitle>
-            <DialogDescription>
-              The new user must change this password on first sign-in.
-            </DialogDescription>
+            <DialogTitle>{t('users.addUser')}</DialogTitle>
+            <DialogDescription>{t('users.createDescription')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="u-email">Email</Label>
+              <Label htmlFor="u-email">{t('common.email')}</Label>
               <Input
                 id="u-email"
                 type="email"
@@ -246,36 +259,37 @@ export function UsersPage(): JSX.Element {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="u-pw">Initial password</Label>
+              <Label htmlFor="u-pw">{t('users.initialPassword')}</Label>
               <Input
                 id="u-pw"
                 type="text"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              <p className="text-muted-foreground text-xs">{t('password.requirements')}</p>
             </div>
             <div className="space-y-2">
-              <Label>Role</Label>
+              <Label>{t('common.role')}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-                <SelectTrigger className="w-full" aria-label="Role">
+                <SelectTrigger className="w-full" aria-label={t('common.role')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="qa-engineer">QA engineer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="qa-engineer">{t('roles.qa-engineer')}</SelectItem>
+                  <SelectItem value="admin">{t('roles.admin')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
-              disabled={busy || !email || password.length < 8}
+              disabled={busy || !email || !passwordSchema.safeParse(password).success}
               onClick={() => void onCreate()}
             >
-              Create
+              {t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>

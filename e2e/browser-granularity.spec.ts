@@ -196,7 +196,7 @@ test('user creation stays disabled until inputs are valid', async ({ page }) => 
   await page.getByLabel('Email').fill('new@example.test');
   await page.getByLabel('Initial password').fill('short');
   await expect(create).toBeDisabled();
-  await page.getByLabel('Initial password').fill('long-enough-password');
+  await page.getByLabel('Initial password').fill('Long-enough-password-1');
   await expect(create).toBeEnabled();
 });
 
@@ -214,7 +214,7 @@ test('user creation surfaces backend conflicts', async ({ page }) => {
   await page.goto('/users');
   await page.getByRole('button', { name: 'Add user' }).click();
   await page.getByLabel('Email').fill('qa@example.test');
-  await page.getByLabel('Initial password').fill('long-enough-password');
+  await page.getByLabel('Initial password').fill('Long-enough-password-1');
   await page.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByText('User already exists')).toBeVisible();
 });

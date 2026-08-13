@@ -239,9 +239,10 @@ describe('HTTP REST surface', () => {
     const adminEmail = `admin-${suffix}@example.test`;
     const qaEmail = `qa-${suffix}@example.test`;
     const managedEmail = `managed-${suffix}@example.test`;
-    const initialPassword = 'initial-password-123';
-    const adminPassword = 'admin-password-456';
-    const qaPassword = 'qa-password-456';
+    // Conform to the password complexity policy (upper+lower+digit+special).
+    const initialPassword = 'Initial-password-123';
+    const adminPassword = 'Admin-password-456';
+    const qaPassword = 'Qa-password-456';
 
     await createSuperAdmin(superEmail, initialPassword);
     const superToken = await signIn(superEmail, initialPassword);
@@ -408,7 +409,7 @@ describe('HTTP REST surface', () => {
       {
         method: 'POST',
         token: adminToken,
-        body: { password: 'managed-reset-password' },
+        body: { password: 'Managed-reset-password-1' },
       },
     );
     assert.equal(reset.status, 201);
@@ -828,6 +829,55 @@ describe('HTTP REST surface', () => {
       body: { refreshToken: refreshed.body.refreshToken },
     });
     assert.equal(refreshAfterLogout.status, 401, 'a logged-out refresh token cannot mint new tokens');
+
+    // Reusable tenant signup links (change: tenant-signup-links). The happy-path
+    // redemption (create tenant + first admin, reuse, duplicate-name reject,
+    // expiry) is asserted exhaustively in tenant-signup-links.test.ts; here we
+    // only exercise each route for the coverage guard, and deliberately redeem
+    // with a bogus token so this single-tenant flow's cleanup stays accurate.
+    const invite = await request<{ id: string; token: string }>(
+      '/api/v1/admin/tenants/invitations',
+      { method: 'POST', token: superToken, body: { expiresInDays: 7 } },
+    );
+    assert.equal(invite.status, 201);
+    const inviteProbe = await request<{ valid: boolean }>(`/api/v1/signup/${invite.body.token}`);
+    assert.equal(inviteProbe.status, 200);
+    assert.equal(inviteProbe.body.valid, true);
+    const inviteList = await request<unknown[]>('/api/v1/admin/tenants/invitations', {
+      token: superToken,
+    });
+    assert.equal(inviteList.status, 200);
+    const redeemProbe = await request<{ error: { code: string } }>('/api/v1/signup', {
+      method: 'POST',
+      body: {
+        token: 'not-a-real-signup-token',
+        name: 'Coverage Only',
+        firstAdmin: { email: 'coverage@x.test', password: 'Coverage-pass-123' },
+      },
+    });
+    assert.equal(redeemProbe.status, 404);
+    const inviteRevoke = await request(`/api/v1/admin/tenants/invitations/${invite.body.id}`, {
+      method: 'DELETE',
+      token: superToken,
+    });
+    assert.equal(inviteRevoke.status, 204);
+
+    // Tenant soft-delete (super-admin). Done last: it removes the main tenant
+    // from the list; the after() hook still hard-deletes it by id during cleanup.
+    // Login-blocking behavior is asserted in tenant-signup-links.test.ts (this
+    // file is near the login rate-limit budget, so no extra /auth/login here).
+    const tenantDeleted = await request(`/api/v1/admin/tenants/${tenantId}`, {
+      method: 'DELETE',
+      token: superToken,
+    });
+    assert.equal(tenantDeleted.status, 204);
+    const listAfterDelete = await request<Array<{ id: string }>>('/api/v1/admin/tenants', {
+      token: superToken,
+    });
+    assert.ok(
+      !listAfterDelete.body.some((tn) => tn.id === tenantId),
+      'a soft-deleted tenant is hidden from the provisioning list',
+    );
 
     const apiSource = fileURLToPath(new URL('../src', import.meta.url));
     const missingRoutes = inventoryApiRoutes(apiSource).filter(

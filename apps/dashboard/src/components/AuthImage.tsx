@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 /**
@@ -29,6 +30,7 @@ export function AuthImage({
   className?: string;
   zoomable?: boolean;
 }): JSX.Element {
+  const { t } = useI18n();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
@@ -61,14 +63,14 @@ export function AuthImage({
   if (error) {
     return (
       <div className="text-muted-foreground grid aspect-video place-items-center rounded-md border text-xs">
-        Unavailable
+        {t('ui.imageUnavailable')}
       </div>
     );
   }
   if (!url) {
     return (
       <div className="bg-muted/50 grid aspect-video animate-pulse place-items-center rounded-md border text-xs">
-        Loading…
+        {t('ui.imageLoading')}
       </div>
     );
   }

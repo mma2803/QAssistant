@@ -3,6 +3,7 @@ import type { TestType } from '@qassistant/shared';
 import { TEST_FRAMEWORK_PRESETS } from '@qassistant/shared';
 
 import { api } from '@/lib/api';
+import { useI18n } from '@/i18n';
 import { useAsync } from '@/lib/useAsync';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ const CUSTOM = 'custom';
  * generation does not specify a per-generation override.
  */
 export function SettingsPage(): JSX.Element {
+  const { t } = useI18n();
   const settings = useAsync(() => api.getTenantSettings(), []);
   const [framework, setFramework] = useState('');
   const [language, setLanguage] = useState('');
@@ -85,34 +87,31 @@ export function SettingsPage(): JSX.Element {
       settings.reload();
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save tenant settings');
+      setError(err instanceof Error ? err.message : t('settings.saveError'));
     } finally {
       setBusy(false);
     }
   }
 
-  if (settings.loading) return <p className="text-muted-foreground text-sm">Loading settings…</p>;
+  if (settings.loading) return <p className="text-muted-foreground text-sm">{t('settings.loading')}</p>;
   if (settings.error) return <p className="text-destructive text-sm">{settings.error}</p>;
 
   const canSave = framework.trim().length > 0 && language.trim().length > 0;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" />
+      <PageHeader title={t('settings.title')} />
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Default test framework</CardTitle>
-          <CardDescription>
-            Used when generating a test, unless overridden per generation. Any team member can
-            change it; it applies tenant-wide.
-          </CardDescription>
+          <CardTitle>{t('settings.frameworkCardTitle')}</CardTitle>
+          <CardDescription>{t('settings.frameworkCardDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <p className="text-destructive text-sm">{error}</p>}
 
           <div className="space-y-2">
-            <Label>Framework / language</Label>
+            <Label>{t('settings.frameworkLanguageLabel')}</Label>
             <Select value={choice} onValueChange={onChoose}>
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -123,7 +122,7 @@ export function SettingsPage(): JSX.Element {
                     {p.framework} / {p.language}
                   </SelectItem>
                 ))}
-                <SelectItem value={CUSTOM}>Custom…</SelectItem>
+                <SelectItem value={CUSTOM}>{t('settings.customOption')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -131,32 +130,32 @@ export function SettingsPage(): JSX.Element {
           {choice === CUSTOM && (
             <div className="flex flex-wrap gap-3">
               <div className="flex-1 space-y-2">
-                <Label>Framework</Label>
+                <Label>{t('settings.frameworkLabel')}</Label>
                 <Input
                   value={framework}
                   onChange={(e) => {
                     setFramework(e.target.value);
                     setSaved(false);
                   }}
-                  placeholder="e.g. WebdriverIO"
+                  placeholder={t('settings.frameworkPlaceholder')}
                 />
               </div>
               <div className="flex-1 space-y-2">
-                <Label>Language</Label>
+                <Label>{t('settings.languageLabel')}</Label>
                 <Input
                   value={language}
                   onChange={(e) => {
                     setLanguage(e.target.value);
                     setSaved(false);
                   }}
-                  placeholder="e.g. JavaScript"
+                  placeholder={t('settings.languagePlaceholder')}
                 />
               </div>
             </div>
           )}
 
           <div className="space-y-2">
-            <Label>Default test type</Label>
+            <Label>{t('settings.testTypeLabel')}</Label>
             <Select
               value={testType}
               onValueChange={(v) => {
@@ -168,17 +167,17 @@ export function SettingsPage(): JSX.Element {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ui">UI test (from the recorded DOM flow)</SelectItem>
-                <SelectItem value="backend">Back-end test (from captured API traffic)</SelectItem>
+                <SelectItem value="ui">{t('settings.testTypeUi')}</SelectItem>
+                <SelectItem value="backend">{t('settings.testTypeBackend')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="flex items-center gap-3">
             <Button disabled={busy || !canSave} onClick={() => void onSave()}>
-              {busy ? 'Saving…' : 'Save default'}
+              {busy ? t('common.saving') : t('settings.saveDefault')}
             </Button>
-            {saved && <span className="text-muted-foreground text-sm">Saved ✓</span>}
+            {saved && <span className="text-muted-foreground text-sm">{t('settings.saved')}</span>}
           </div>
         </CardContent>
       </Card>

@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthContext';
+import { useI18n } from '@/i18n';
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { BugMark } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
@@ -24,6 +26,7 @@ import { Label } from '@/components/ui/label';
  */
 export function LoginPage(): JSX.Element {
   const { signIn } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: Location } | null)?.from?.pathname;
@@ -41,7 +44,7 @@ export function LoginPage(): JSX.Element {
       await signIn(email, password, tenantSlug || undefined);
       navigate(from ?? '/', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed');
+      setError(err instanceof Error ? err.message : t('login.failed'));
     } finally {
       setBusy(false);
     }
@@ -49,6 +52,9 @@ export function LoginPage(): JSX.Element {
 
   return (
     <div className="bg-muted/40 flex min-h-screen items-center justify-center p-4">
+      <div className="absolute top-4 right-4">
+        <LanguageToggle />
+      </div>
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <BugMark className="size-12" />
@@ -58,13 +64,13 @@ export function LoginPage(): JSX.Element {
         </div>
         <Card>
           <CardHeader>
-            <h1 className="text-xl leading-none font-semibold">Sign in</h1>
-            <CardDescription>Access your tenant's QA workspace.</CardDescription>
+            <h1 className="text-xl leading-none font-semibold">{t('login.title')}</h1>
+            <CardDescription>{t('login.description')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={onSubmit}>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('login.email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -75,7 +81,7 @@ export function LoginPage(): JSX.Element {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('login.password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -86,18 +92,18 @@ export function LoginPage(): JSX.Element {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="tenant">Tenant</Label>
+                <Label htmlFor="tenant">{t('login.tenant')}</Label>
                 <Input
                   id="tenant"
                   type="text"
                   value={tenantSlug}
-                  placeholder="tenant slug (blank for super-admin)"
+                  placeholder={t('login.tenantPlaceholder')}
                   onChange={(e) => setTenantSlug(e.target.value)}
                 />
               </div>
               {error && <p className="text-destructive text-sm">{error}</p>}
               <Button type="submit" className="w-full" disabled={busy}>
-                {busy ? 'Signing in…' : 'Sign in'}
+                {busy ? t('login.submitting') : t('login.submit')}
               </Button>
             </form>
           </CardContent>

@@ -70,7 +70,9 @@ export class AuthRoutesService {
       .where(eq(tenants.slug, input.tenantSlug))
       .limit(1);
     const tenant = tenantRows[0];
-    if (!tenant) {
+    // A soft-deleted tenant is treated exactly like an unknown one (uniform,
+    // constant-time failure so deletion is not observable via the login side channel).
+    if (!tenant || tenant.deletedAt) {
       await this.password.verifyDummyPassword(input.password);
       throw invalid();
     }

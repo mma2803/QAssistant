@@ -18,6 +18,7 @@ import { INTEGRATION_STATUSES } from '@qassistant/shared';
 import { api, saveBlob } from '@/lib/api';
 import { useAsync } from '@/lib/useAsync';
 import { useAuth } from '@/auth/AuthContext';
+import { useI18n } from '@/i18n';
 import {
   formatDateTime,
   formatDuration,
@@ -102,6 +103,7 @@ function StatCard({
  * first page.
  */
 export function SessionsPage(): JSX.Element {
+  const { t } = useI18n();
   const { role } = useAuth();
   const navigate = useNavigate();
   const isAdmin = role === 'admin';
@@ -144,7 +146,7 @@ export function SessionsPage(): JSX.Element {
       setCursor(res.nextCursor ?? null);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load recordings');
+      setError(err instanceof Error ? err.message : t('sessions.loadError'));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -272,7 +274,7 @@ export function SessionsPage(): JSX.Element {
   }
 
   async function onDelete(sessionId: string): Promise<void> {
-    if (!confirm('Soft-delete this recording? It can be restored within 30 days.')) return;
+    if (!confirm(t('sessions.confirmDelete'))) return;
     await api.deleteSession(sessionId);
     void load(true);
   }
@@ -287,8 +289,7 @@ export function SessionsPage(): JSX.Element {
   }
 
   async function onBulkDelete(): Promise<void> {
-    if (!confirm(`Soft-delete ${selected.size} recording(s)? They can be restored within 30 days.`))
-      return;
+    if (!confirm(t('sessions.confirmBulkDelete', { count: selected.size }))) return;
     setBulkBusy(true);
     try {
       for (const id of selected) await api.deleteSession(id);
@@ -301,13 +302,13 @@ export function SessionsPage(): JSX.Element {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Recordings" />
+      <PageHeader title={t('sessions.title')} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Loaded recordings" value={stats.total} icon={Video} />
-        <StatCard label="Active" value={stats.active} icon={Clock} />
-        <StatCard label="Completed" value={stats.completed} icon={Video} />
-        <StatCard label="Tests generated" value={stats.tests} icon={FileCode2} />
+        <StatCard label={t('sessions.statLoaded')} value={stats.total} icon={Video} />
+        <StatCard label={t('sessions.statActive')} value={stats.active} icon={Clock} />
+        <StatCard label={t('sessions.statCompleted')} value={stats.completed} icon={Video} />
+        <StatCard label={t('sessions.statTests')} value={stats.tests} icon={FileCode2} />
       </div>
 
       <Card>
@@ -315,18 +316,18 @@ export function SessionsPage(): JSX.Element {
           <div className="relative min-w-56 flex-1">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
             <Input
-              placeholder="Search project, context, tester…"
+              placeholder={t('sessions.searchPlaceholder')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="pl-9"
             />
           </div>
           <Select value={projectId || ALL} onValueChange={(v) => setProjectId(v === ALL ? '' : v)}>
-            <SelectTrigger className="w-48" aria-label="Project">
-              <SelectValue placeholder="All projects" />
+            <SelectTrigger className="w-48" aria-label={t('sessions.project')}>
+              <SelectValue placeholder={t('sessions.allProjects')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All projects</SelectItem>
+              <SelectItem value={ALL}>{t('sessions.allProjects')}</SelectItem>
               {(projects.data ?? []).map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name}
@@ -336,19 +337,19 @@ export function SessionsPage(): JSX.Element {
           </Select>
           {/* Combined Status: session status + integration status */}
           <Select value={statusValue} onValueChange={onStatusChange}>
-            <SelectTrigger className="w-52" aria-label="Status">
-              <SelectValue placeholder="All status" />
+            <SelectTrigger className="w-52" aria-label={t('common.status')}>
+              <SelectValue placeholder={t('sessions.allStatus')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All status</SelectItem>
+              <SelectItem value={ALL}>{t('sessions.allStatus')}</SelectItem>
               <SelectGroup>
-                <SelectLabel>Session</SelectLabel>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
+                <SelectLabel>{t('sessions.sessionGroup')}</SelectLabel>
+                <SelectItem value="active">{t('sessions.statusActive')}</SelectItem>
+                <SelectItem value="completed">{t('sessions.statusCompleted')}</SelectItem>
               </SelectGroup>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel>Integration</SelectLabel>
+                <SelectLabel>{t('sessions.integrationGroup')}</SelectLabel>
                 {INTEGRATION_STATUSES.map((s) => (
                   <SelectItem key={s} value={`int:${s}`}>
                     {integrationStatusLabel(s)}
@@ -360,10 +361,10 @@ export function SessionsPage(): JSX.Element {
           {isAdmin && (
             <Select value={tester || ALL} onValueChange={(v) => setTester(v === ALL ? '' : v)}>
               <SelectTrigger className="w-44">
-                <SelectValue placeholder="Recorded by" />
+                <SelectValue placeholder={t('sessions.recordedBy')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>Recorded by: all</SelectItem>
+                <SelectItem value={ALL}>{t('sessions.recordedByAll')}</SelectItem>
                 {testers.map((t) => (
                   <SelectItem key={t} value={t}>
                     {t}
@@ -381,14 +382,14 @@ export function SessionsPage(): JSX.Element {
             }}
           >
             <SelectTrigger className="w-44">
-              <SelectValue placeholder="Sort by time" />
+              <SelectValue placeholder={t('sessions.sortByTime')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="desc">Newest first</SelectItem>
-              <SelectItem value="asc">Oldest first</SelectItem>
+              <SelectItem value="desc">{t('sessions.newestFirst')}</SelectItem>
+              <SelectItem value="asc">{t('sessions.oldestFirst')}</SelectItem>
               {sortKey !== 'startedAt' && (
                 <SelectItem value="custom" disabled>
-                  Sorted by column
+                  {t('sessions.sortedByColumn')}
                 </SelectItem>
               )}
             </SelectContent>
@@ -396,7 +397,7 @@ export function SessionsPage(): JSX.Element {
           {/* Date range */}
           <div className="flex items-end gap-2">
             <div className="space-y-1">
-              <span className="text-muted-foreground text-xs">From</span>
+              <span className="text-muted-foreground text-xs">{t('sessions.dateFrom')}</span>
               <Input
                 type="date"
                 value={dateFrom}
@@ -406,7 +407,7 @@ export function SessionsPage(): JSX.Element {
               />
             </div>
             <div className="space-y-1">
-              <span className="text-muted-foreground text-xs">To</span>
+              <span className="text-muted-foreground text-xs">{t('sessions.dateTo')}</span>
               <Input
                 type="date"
                 value={dateTo}
@@ -424,7 +425,7 @@ export function SessionsPage(): JSX.Element {
                   setDateTo('');
                 }}
               >
-                Clear
+                {t('sessions.clear')}
               </Button>
             )}
           </div>
@@ -434,11 +435,11 @@ export function SessionsPage(): JSX.Element {
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div className="bg-accent/50 flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2 text-sm">
-          <span className="font-medium">{selected.size} selected</span>
+          <span className="font-medium">{t('sessions.selectedCount', { count: selected.size })}</span>
           <div className="flex-1" />
           <Button variant="outline" size="sm" disabled={bulkBusy} onClick={() => void onBulkExport()}>
             <Download className="size-4" />
-            Export
+            {t('sessions.export')}
           </Button>
           <Button
             variant="outline"
@@ -448,10 +449,10 @@ export function SessionsPage(): JSX.Element {
             onClick={() => void onBulkDelete()}
           >
             <Trash2 className="size-4" />
-            Delete
+            {t('sessions.delete')}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            Clear
+            {t('sessions.clear')}
           </Button>
         </div>
       )}
@@ -466,7 +467,7 @@ export function SessionsPage(): JSX.Element {
               ))}
             </div>
           ) : rows.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">No recordings found.</p>
+            <p className="text-muted-foreground p-6 text-sm">{t('sessions.empty')}</p>
           ) : (
             <Table>
               <TableHeader>
@@ -475,25 +476,25 @@ export function SessionsPage(): JSX.Element {
                     <Checkbox
                       checked={allSelected}
                       onCheckedChange={toggleSelectAll}
-                      aria-label="Select all"
+                      aria-label={t('sessions.selectAll')}
                     />
                   </TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Work context</TableHead>
-                  {isAdmin && <TableHead>Recorded by</TableHead>}
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t('sessions.project')}</TableHead>
+                  <TableHead>{t('sessions.colWorkContext')}</TableHead>
+                  {isAdmin && <TableHead>{t('sessions.recordedBy')}</TableHead>}
+                  <TableHead>{t('common.status')}</TableHead>
                   <TableHead>
-                    <SortHeader label="Started" k="startedAt" />
+                    <SortHeader label={t('sessions.colStarted')} k="startedAt" />
                   </TableHead>
                   <TableHead>
-                    <SortHeader label="Duration" k="durationSeconds" />
+                    <SortHeader label={t('sessions.colDuration')} k="durationSeconds" />
                   </TableHead>
                   <TableHead>
-                    <SortHeader label="Tests" k="generatedTestCount" />
+                    <SortHeader label={t('sessions.colTests')} k="generatedTestCount" />
                   </TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Integration</TableHead>
-                  <TableHead className="w-12 text-right">Actions</TableHead>
+                  <TableHead>{t('sessions.colType')}</TableHead>
+                  <TableHead>{t('sessions.colIntegration')}</TableHead>
+                  <TableHead className="w-12 text-right">{t('common.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -508,7 +509,7 @@ export function SessionsPage(): JSX.Element {
                       <Checkbox
                         checked={selected.has(s.id)}
                         onCheckedChange={() => toggleRow(s.id)}
-                        aria-label="Select row"
+                        aria-label={t('sessions.selectRow')}
                       />
                     </TableCell>
                     <TableCell className="font-medium">{s.projectName}</TableCell>
@@ -555,23 +556,23 @@ export function SessionsPage(): JSX.Element {
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label="Actions">
+                          <Button variant="ghost" size="icon" aria-label={t('common.actions')}>
                             <MoreHorizontal className="size-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => navigate(`/sessions/${s.id}`)}>
-                            Open
+                            {t('sessions.open')}
                           </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => void onExport(s.id)}>
-                            Export ZIP
+                            {t('sessions.exportZip')}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
                             onSelect={() => void onDelete(s.id)}
                           >
-                            Delete
+                            {t('sessions.delete')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -585,7 +586,7 @@ export function SessionsPage(): JSX.Element {
           {!loading && rows.length > 0 && (
             <div className="text-muted-foreground flex items-center justify-between gap-3 border-t px-6 py-3 text-xs">
               <span>
-                Showing {rows.length} of {items.length} loaded
+                {t('sessions.showing', { shown: rows.length, total: items.length })}
               </span>
               {cursor && (
                 <Button
@@ -594,7 +595,7 @@ export function SessionsPage(): JSX.Element {
                   disabled={loadingMore}
                   onClick={() => void load(false)}
                 >
-                  {loadingMore ? 'Loading…' : 'Load more'}
+                  {loadingMore ? t('common.loading') : t('sessions.loadMore')}
                 </Button>
               )}
             </div>

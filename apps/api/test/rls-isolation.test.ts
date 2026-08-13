@@ -50,8 +50,6 @@ let projectA = '';
 let projectB = '';
 let sessionA = '';
 let sessionB = '';
-let jiraA = '';
-let jiraB = '';
 let artifactA = '';
 let artifactB = '';
 let flagA = '';
@@ -68,7 +66,6 @@ async function seedChildRows(
     adminId: string;
     projectId: string;
     sessionId: string;
-    jiraId: string;
     artifactId: string;
     flagId: string;
     generatedId: string;
@@ -76,19 +73,6 @@ async function seedChildRows(
     label: string;
   },
 ): Promise<void> {
-  await client.query(
-    `INSERT INTO jira_configs
-       (id, tenant_id, project_id, base_url, project_key, token_secret_ref, status)
-     VALUES ($1,$2,$3,$4,$5,$6,'active')`,
-    [
-      ids.jiraId,
-      ids.tenantId,
-      ids.projectId,
-      `https://jira-${ids.label}.example.com`,
-      ids.label.toUpperCase(),
-      `local://jira-${ids.label}`,
-    ],
-  );
   await client.query(
     `INSERT INTO artifacts
        (id, tenant_id, project_id, session_id, type, seq, gcs_path, content_type, size_bytes, compression, captured_at)
@@ -164,8 +148,6 @@ before(async () => {
   projectB = newId();
   sessionA = newId();
   sessionB = newId();
-  jiraA = newId();
-  jiraB = newId();
   artifactA = newId();
   artifactB = newId();
   flagA = newId();
@@ -192,7 +174,6 @@ before(async () => {
       adminId: adminA,
       projectId: projectA,
       sessionId: sessionA,
-      jiraId: jiraA,
       artifactId: artifactA,
       flagId: flagA,
       generatedId: generatedA,
@@ -218,7 +199,6 @@ before(async () => {
       adminId: adminB,
       projectId: projectB,
       sessionId: sessionB,
-      jiraId: jiraB,
       artifactId: artifactB,
       flagId: flagB,
       generatedId: generatedB,
@@ -386,15 +366,6 @@ describe('RLS cross-tenant isolation', () => {
       const rows = await c.query('SELECT id FROM tenant_users ORDER BY id');
       assert.deepEqual(rows.rows.map((row) => row.id), [adminA]);
       assert.ok(!rows.rows.some((row) => row.id === adminB));
-    });
-  });
-
-  it('jira_configs exposes only configuration from the active tenant', async (t) => {
-    if (!reachable || !pools) return t.skip('no Postgres');
-    await withTenant(pools, tenantA, async (c) => {
-      const rows = await c.query('SELECT id FROM jira_configs');
-      assert.deepEqual(rows.rows.map((row) => row.id), [jiraA]);
-      assert.ok(!rows.rows.some((row) => row.id === jiraB));
     });
   });
 

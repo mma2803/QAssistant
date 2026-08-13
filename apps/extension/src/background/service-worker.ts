@@ -137,7 +137,6 @@ async function handlePopup(req: PopupRequest): Promise<Result<unknown>> {
         const session = await recording.start({
           project,
           projectId: req.projectId,
-          jiraId: req.jiraId,
           description: req.description,
           screenshotEnabled: req.screenshotEnabled,
         });

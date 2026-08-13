@@ -115,7 +115,7 @@ export function buildServer(config: McpConfig): McpServer {
   server.tool(
     'get_record',
     'Fetch one record by session id: metadata, artifacts, generated code ' +
-      'versions, flags, and Jira/description context.',
+      'versions, flags, and the session description.',
     { sessionId: z.string().min(1) },
     async ({ sessionId }) => {
       try {

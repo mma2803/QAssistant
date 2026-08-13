@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { nonEmptyString, testFrameworkSchema, testLanguageSchema, testTypeSchema } from '../common.js';
 import { PROJECT_STATUSES } from '../enums.js';
-import { projectSchema, jiraConfigSchema } from '../entities.js';
+import { projectSchema } from '../entities.js';
 
 /** Project setup DTOs (contract section 4.3). */
 
@@ -52,20 +52,4 @@ export const setProjectTestFrameworkRequestSchema = z.object({
 });
 export type SetProjectTestFrameworkRequest = z.infer<typeof setProjectTestFrameworkRequestSchema>;
 
-/** PUT /projects/{projectId}/jira: create/replace Jira config (token goes to the encrypted secrets store). */
-export const setJiraConfigRequestSchema = z.object({
-  baseUrl: z.string().url(),
-  projectKey: nonEmptyString,
-  token: nonEmptyString,
-});
-export type SetJiraConfigRequest = z.infer<typeof setJiraConfigRequestSchema>;
-
-/** POST /projects/{projectId}/jira/test response. */
-export const jiraTestResponseSchema = z.object({
-  ok: z.boolean(),
-  message: z.string().optional(),
-});
-export type JiraTestResponse = z.infer<typeof jiraTestResponseSchema>;
-
 export const projectResponseSchema = projectSchema;
-export const jiraConfigResponseSchema = jiraConfigSchema;

@@ -125,7 +125,7 @@ test('extension popup starts and stops a recording with frozen context', async (
   await expect(page.getByLabel('Project')).toHaveValue(ids.project);
   await expect(page.getByLabel('Capture screenshots')).toBeChecked();
   await page.getByRole('button', { name: 'Start recording' }).click();
-  await expect(page.getByText('Enter a Jira ID or a non-empty description')).toBeVisible();
+  await expect(page.getByText('Enter a non-empty description')).toBeVisible();
 
   await page.getByLabel('Description').fill('Verify checkout success.');
   await page.getByRole('button', { name: 'Start recording' }).click();

@@ -15,7 +15,6 @@ import { AppException } from '../auth/errors.js';
 import { artifacts, flags, projects, sessions } from '../db/schema.js';
 import { newId } from '../db/id.js';
 import { toSession, toArtifact, toFlag } from '../common/serializers.js';
-import { JiraValidationService } from '../jira/jira-validation.service.js';
 import {
   GCS_SIGNER,
   artifactObjectPath,
@@ -27,9 +26,8 @@ import {
  * Extension capture backend (contract section 4.4; spec session-capture).
  *
  * - 3.3 session-start gate: authorize the project (tenant match + active) and
- *   require work context (validated jiraId OR non-empty description). Freeze
- *   projectId / jiraId / description on the row.
- * - 3.4 live Jira validation: delegated to JiraValidationService (contract 5).
+ *   require work context (a non-empty description). Freeze projectId /
+ *   description on the row.
  * - 3.8 GCS upload: mint write-only V4 signed PUT URLs scoped to the session
  *   prefix, then register artifact metadata.
  * - 3.9 server-side stamping: tenantId / projectId / recordedBy / sessionId are
@@ -40,7 +38,6 @@ import {
 export class CaptureService {
   constructor(
     private readonly ctx: RequestContext,
-    private readonly jiraValidation: JiraValidationService,
     @Inject(GCS_SIGNER) private readonly signer: GcsSigner,
   ) {}
 
@@ -62,8 +59,8 @@ export class CaptureService {
 
   /**
    * POST /sessions: start a session. Blocks every spec scenario before any
-   * capture: no project, inactive/foreign project, no work context, jiraId on a
-   * project without Jira, invalid jira, wrong project key, Jira outage.
+   * capture: no project, inactive/foreign project, no work context (empty
+   * description).
    */
   async startSession(input: StartSessionRequest): Promise<Session> {
     const tenantId = this.requireTenant();
@@ -71,7 +68,7 @@ export class CaptureService {
 
     // Authorize the project: it must exist in this tenant and be active. A
     // missing/foreign project is "no project" from the tester's perspective and
-    // blocks before any Jira validation (spec "No project blocks the session").
+    // blocks the session (spec "No project blocks the session").
     const projectRows = await this.ctx.dbTx
       .select()
       .from(projects)
@@ -93,28 +90,16 @@ export class CaptureService {
       );
     }
 
-    // Work context: a validated jiraId OR a non-empty description is required.
-    // Zod already guarantees at least one is present; we trim again defensively.
-    const description = input.description?.trim() || null;
-    const jiraIdInput = input.jiraId?.trim() || null;
-    if (!jiraIdInput && !description) {
+    // Work context: a non-empty description is required. Zod already guarantees
+    // it is present and non-empty; we trim again defensively (and guard against
+    // a client bypassing the DTO refinement).
+    const description = input.description?.trim() || '';
+    if (!description) {
       throw new AppException(
         'validation_failed',
-        'A Jira ID or a non-empty description is required',
+        'A non-empty description is required',
         HttpStatus.BAD_REQUEST,
       );
-    }
-
-    // Live Jira validation (contract 5). Any failure blocks the session and the
-    // client may resubmit without jiraId and with a description.
-    let jiraId: string | null = null;
-    let jiraSummary: string | null = null;
-    let jiraStatus: string | null = null;
-    if (jiraIdInput) {
-      const result = await this.jiraValidation.validate(tenantId, input.projectId, jiraIdInput);
-      jiraId = result.jiraId;
-      jiraSummary = result.jiraSummary;
-      jiraStatus = result.jiraStatus;
     }
 
     // Effective screenshot setting: per-session override or the project default.
@@ -128,9 +113,6 @@ export class CaptureService {
         tenantId,
         projectId: input.projectId,
         recordedBy,
-        jiraId,
-        jiraSummary,
-        jiraStatus,
         description,
         screenshotEnabled,
         status: 'active',

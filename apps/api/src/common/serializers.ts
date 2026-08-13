@@ -2,7 +2,6 @@ import type {
   Tenant,
   TenantUser,
   Project,
-  JiraConfig,
   Session,
   Artifact,
   Flag,
@@ -11,7 +10,6 @@ import type {
   Role,
   TenantStatus,
   UserStatus,
-  JiraStatus,
   SessionStatus,
   SessionCloseReason,
   ArtifactType,
@@ -21,7 +19,6 @@ import type {
   tenants,
   tenantUsers,
   projects,
-  jiraConfigs,
   sessions,
   artifacts,
   flags,
@@ -36,7 +33,6 @@ import type {
 type TenantRow = typeof tenants.$inferSelect;
 type TenantUserRow = typeof tenantUsers.$inferSelect;
 type ProjectRow = typeof projects.$inferSelect;
-type JiraConfigRow = typeof jiraConfigs.$inferSelect;
 type SessionRow = typeof sessions.$inferSelect;
 type ArtifactRow = typeof artifacts.$inferSelect;
 type FlagRow = typeof flags.$inferSelect;
@@ -96,29 +92,12 @@ export function toProject(row: ProjectRow): Project {
   };
 }
 
-/** tokenSecretRef is intentionally never serialized (tokens stay in the encrypted secrets store). */
-export function toJiraConfig(row: JiraConfigRow): JiraConfig {
-  return {
-    id: row.id,
-    tenantId: row.tenantId,
-    projectId: row.projectId,
-    baseUrl: row.baseUrl,
-    projectKey: row.projectKey,
-    status: row.status as JiraStatus,
-    createdAt: iso(row.createdAt),
-    updatedAt: iso(row.updatedAt),
-  };
-}
-
 export function toSession(row: SessionRow): Session {
   return {
     id: row.id,
     tenantId: row.tenantId,
     projectId: row.projectId,
     recordedBy: row.recordedBy,
-    jiraId: row.jiraId,
-    jiraSummary: row.jiraSummary,
-    jiraStatus: row.jiraStatus,
     description: row.description,
     screenshotEnabled: row.screenshotEnabled,
     status: row.status as SessionStatus,

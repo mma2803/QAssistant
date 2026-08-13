@@ -21,18 +21,12 @@ import { ProjectsService } from '../src/projects/projects.service.js';
 import { CaptureService } from '../src/capture/capture.service.js';
 import { CodegenService } from '../src/codegen/codegen.service.js';
 import { TenantSettingsService } from '../src/tenant-settings/tenant-settings.service.js';
-import { JiraValidationService } from '../src/jira/jira-validation.service.js';
 import { artifactObjectPath } from '../src/storage/gcs-signer.service.js';
 import { AppException } from '../src/auth/errors.js';
-import type { RequestContext } from '../src/auth/request-context.js';
 
 let h: Harness | null = null;
 let reachable = false;
 const tenantIds: string[] = [];
-
-function jiraValidationFor(ctx: RequestContext, harness: Harness): JiraValidationService {
-  return new JiraValidationService(ctx, harness.jira, harness.secrets);
-}
 
 async function provisionTenant(prefix: string): Promise<TenantIdentity> {
   const adminSvc = new AdminService(h!.db, h!.identity);
@@ -74,7 +68,6 @@ after(async () => {
           'flags',
           'artifacts',
           'sessions',
-          'jira_configs',
           'projects',
           'tenant_users',
         ]) {
@@ -95,7 +88,7 @@ describe('configurable-test-type (DB-backed)', () => {
 
     // Project + recorded session.
     const project = await h.asTenant(admin, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       return projects.createProject({
         name: `proj-${newId()}`,
         baseUrl: 'https://api.acme.test',
@@ -105,7 +98,7 @@ describe('configurable-test-type (DB-backed)', () => {
       });
     });
     const session = await h.asTenant(admin, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.startSession({
         projectId: project.id,
         description: 'Exercise the cart API',
@@ -139,7 +132,7 @@ describe('configurable-test-type (DB-backed)', () => {
     h.reader.put(netPath, gzipSync(Buffer.from(JSON.stringify(chunk), 'utf8')));
 
     await h.asTenant(admin, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       await capture.registerArtifact(session.id, {
         type: 'network_log',
         seq: 0,
@@ -205,7 +198,7 @@ describe('configurable-test-type (DB-backed)', () => {
     // Each step is its own committed transaction so the inline worker (which runs
     // in a separate superadmin transaction) sees the persisted session.
     const sessionId = await h.asTenant(a, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       const project = await projects.createProject({
         name: `proj-${newId()}`,
         baseUrl: 'https://app.iso-a.test',
@@ -213,7 +206,7 @@ describe('configurable-test-type (DB-backed)', () => {
         maskingSelectors: [],
         inactivityTimeoutSeconds: 900,
       });
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       const s = await capture.startSession({
         projectId: project.id,
         description: 'iso',

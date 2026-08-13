@@ -100,5 +100,5 @@ current shell). `GET /health` returns `{ status: "ok", db: "up" | "down" }`.
              decorators, error envelope.
 - `health/`  public health endpoint.
 - feature folders (`admin/`, `users/`, `projects/`, `capture/`, `codegen/`,
-  `dashboard/`, `jira/`, `storage/`, `secrets/`) implement the product; see
+  `dashboard/`, `storage/`, `secrets/`) implement the product; see
   `src/FEATURE_MODULES.md`.

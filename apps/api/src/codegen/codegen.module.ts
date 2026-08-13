@@ -24,7 +24,7 @@ import {
 /**
  * Knowledge & code generation module (contract section 4.5; spec
  * knowledge-and-codegen). Relies on the global Config / Db / Auth / Storage /
- * Secrets / Jira modules.
+ * Secrets modules.
  *
  * Driver selection (offline-first):
  *   - GEMINI_CLIENT: the live @google/genai client when GEMINI_API_KEY is set,

@@ -1,46 +1,78 @@
 # QAssistant
 
-QAssistant is a greenfield, multi-tenant QA capture platform. It records manual web testing sessions, stores the replayable evidence, generates Playwright automation, and gives QA managers tenant-scoped visibility.
+QAssistant turns manual QA testing into reusable automated tests. A tester runs
+through a scenario in their browser as usual; QAssistant records the real session (the
+page, the network calls, screenshots), and an AI turns that recording into an automated
+test (e.g. Playwright) the team can run again and again. A web dashboard gives each
+organisation a clear, role-scoped view of its recordings, generated tests, and activity.
 
-> **QA manager?** See the benefit-first product pitch → [`docs/qa-managers/README.md`](docs/qa-managers/README.md)
+> **QA manager?** For the benefit-first product tour, see
+> [`docs/qa-managers/README.md`](docs/qa-managers/README.md).
 
-## Current State
+## How it works
 
-The OpenSpec change at `openspec/changes/archive/2026-06-23-qassistant-mvp` records the original MVP decisions and the API/data-model contract; `openspec/changes/archive/2026-07-27-self-hosted-vps-migration` records the move off GCP to a self-hosted VPS. The application code exists: a NestJS API, a React dashboard, a Chrome MV3 extension, an MCP server, a shared TypeScript package, and the self-hosted infra (Docker Compose + Caddy + GitHub Actions). See `openspec/changes/archive/2026-06-23-qassistant-mvp/data-model-and-api-contract.md` for the authoritative schema and REST surface, and `openspec/specs/platform-infrastructure/spec.md` / `openspec/specs/identity-and-tenancy/spec.md` for the current infrastructure and auth requirements.
+1. **Record.** A tester picks a project, adds a short description of what they're testing,
+   and runs their scenario while a Chrome extension captures the session (DOM via rrweb,
+   network traffic, optional screenshots) and streams it to the backend.
+2. **Review & generate.** In the dashboard you open a recording and let the AI generate
+   an automated test from it, choosing the test type (UI or back-end), the framework, and
+   the language. Iterate with instructions until it's right, then approve the version you
+   want.
+3. **Integrate.** An MCP server exposes the approved tests to an AI coding client
+   (e.g. Claude Code), which adds the test to your repository and runs it. A test is
+   kept only if it actually passes.
 
-For the privacy and capture posture (what is captured, masking, screenshots, retention, deletion, secrets), see [`docs/PRIVACY.md`](docs/PRIVACY.md).
+Everything is **multi-tenant**: each client is an isolated organisation, and data is
+separated per organisation at the database level (row-level security).
 
-## Operator Promise
+## Cloud or Local?
 
-The target operator input is: a blank VPS with SSH access, plus a `main`-branch push to deploy.
+You can use QAssistant two ways. It's the same application; only *where it runs*
+differs. Pick whichever fits you:
 
-```bash
-ssh root@<vps-ip> 'bash -s' < infra/vps/bootstrap.sh   # once, on a blank box
-```
+| | ☁️ QAssistant Cloud (hosted) | 💻 QAssistant Local (self-hosted) |
+|---|---|---|
+| **Best for** | Teams who just want to use it | Running it on your own infrastructure, or developing it |
+| **Setup** | Nothing to install: use a signup link to create your organisation, then sign in | Clone the repo, Docker + Node, run the stack yourself |
+| **Where your data lives** | On our server (the VPS) | On your own machine/server |
+| **AI test generation** | Ready out of the box | Works offline with a fake generator; set `GEMINI_API_KEY` for real generation |
+| **Updates & backups** | Handled for you (auto-deploy) | You update, deploy, and back up yourself |
+| **Chrome extension** | Load it into Chrome | Build it, then load it into Chrome |
+| **Upsides** | Ready in minutes, nothing to maintain, always up to date | Full control of your infra and data, works offline, no dependency on us |
+| **Trade-offs** | Data sits on our server; you depend on our hosted instance | You set up, maintain, and back it up; real AI generation needs your own Gemini key |
 
-`bootstrap.sh` installs Docker, configures the firewall, and creates a dedicated deploy user. After the remaining one-time manual steps it prints (generating the persistent `.env`, restricting the deploy SSH key, adding GitHub Actions secrets), every push to `main` deploys automatically via `.github/workflows/deploy.yml`.
+**The Chrome extension** (used to record sessions) is installed the same way in both
+modes: build it, then load it into Chrome via `chrome://extensions` → Developer mode →
+Load unpacked → `apps/extension/dist`. There's no one-click Web Store install yet. The
+only difference is the backend the build targets: it defaults to the hosted instance
+(Cloud), or you set `VITE_API_BASE_URL` to your local API (Local). See
+[`apps/extension/README.md`](apps/extension/README.md).
 
-## Repo Layout
 
-```text
-apps/api/                 NestJS backend API (Drizzle + RLS); tests in apps/api/test
-apps/dashboard/           React + Vite dashboard SPA
-apps/extension/           Chrome MV3 extension (Vite + @crxjs, rrweb capture)
-apps/mcp/                 MCP server (stdio): exposes records + generated code to MCP clients, records integration outcomes; never pushes to Git
-packages/shared/          Shared zod schemas, enum constants, and inferred types
-infra/docker/             Dockerfiles (api, web/dashboard+Caddy) and the Caddyfile
-infra/docker-compose.prod.yml  Production stack: postgres, minio, api, web
-infra/vps/                bootstrap.sh (one-time OS setup), deploy.sh (CI/CD entrypoint), backup.sh (nightly pg_dump)
-infra/local/              docker-compose dev config (postgres roles)
-docs/PRIVACY.md           Privacy and capture posture
-.github/workflows/        ci.yml (lint/typecheck/test/e2e), deploy.yml (build+push+deploy on push to main)
-openspec/                 OpenSpec proposal, design, specs, contract, and tasks
-docker-compose.yml        Local dev services (postgres + minio)
-```
+## QAssistant Cloud (hosted)
 
-This is an npm-workspaces monorepo (`apps/*`, `packages/*`), TypeScript throughout, Node 20+. Local development runs against docker-compose (`npm run dev:infra`). Backend tests live in `apps/api/test` (`npm test -w @qassistant/api`); see `apps/api/test/E2E.md`.
+The hosted instance runs on our server and is ready to use, at
+**https://135-181-104-90.sslip.io/**.
 
-## Running locally
+**Roles in your organisation.**
+- **Admin:** runs your organisation (projects, team members, recordings).
+- **QA engineer:** records sessions and reviews recordings and generated tests.
+
+**Getting access.** There's no public self-signup: your organisation is set up by the
+platform operator, who sends you a **signup link**. Use it once to create your
+organisation and its first admin (name + email + password), then sign in with your
+**email**, **password**, and **organisation identifier** (a short slug). The first admin
+adds testers from the **Users** screen.
+
+Recording, reviewing, generating, and integrating then work as in
+[How it works](#how-it-works) above. The interface is in **English or French**, following
+your browser language (with a manual switch in the top bar).
+
+## QAssistant Local (run it yourself)
+
+Run the whole stack on your own machine, to develop QAssistant or to try it without the
+hosted instance. It's an npm-workspaces monorepo, TypeScript throughout, Node 20+, backed
+by docker-compose.
 
 Prerequisites: Node 20 (`.nvmrc`) and Docker.
 
@@ -51,8 +83,7 @@ cp .env.example .env
 # 1) Postgres + MinIO
 npm run dev:infra
 
-# 2) Load env into THIS shell. The app reads process.env directly and does NOT
-#    auto-load .env (no dotenv).
+# 2) Load env into THIS shell (the app reads process.env directly; no dotenv).
 set -a; . ./.env; set +a          # or run each command with `node --env-file=.env`
 
 # 3) Backend
@@ -61,46 +92,63 @@ npm run seed:super-admin -w @qassistant/api    # first super-admin (no UI path)
 npm run start:dev -w @qassistant/api           # API on http://127.0.0.1:8080 (/api/v1)
 
 # 4) Dashboard (new terminal; re-run the `set -a; . ./.env; set +a` line first)
-# The proxy target defaults to the hosted VPS; override it to hit the local API.
 VITE_API_PROXY_TARGET=http://127.0.0.1:8080 \
-  npm run dev -w @qassistant/dashboard         # http://localhost:5173, proxies /api -> :8080
+  npm run dev -w @qassistant/dashboard         # http://localhost:5173, proxies /api to :8080
 
-# 5) Extension (Chrome MV3)
-npm run build -w @qassistant/extension         # then chrome://extensions ->
-                                               # Developer mode -> Load unpacked -> apps/extension/dist
+# 5) Extension (Chrome MV3) — build it pointing at your LOCAL API, then load it.
+#    Without VITE_API_BASE_URL the build targets the hosted instance, not localhost.
+VITE_API_BASE_URL=http://127.0.0.1:8080 npm run build -w @qassistant/extension
+# chrome://extensions -> Developer mode -> Load unpacked -> apps/extension/dist
 ```
 
-Sign-in flow: the seeded super-admin creates a tenant (with a slug) + first admin; admins create qa-engineers; first login forces a password change. The offline drivers (`STORAGE_DRIVER=local`, `SECRETS_DRIVER=local`, `JIRA_DRIVER=local`, `CLOUD_TASKS_DRIVER=inline`, fake Gemini when `GEMINI_API_KEY` is empty) need no external services at all beyond Postgres. Per-app run notes: [`apps/api/README.md`](apps/api/README.md), [`apps/dashboard/README.md`](apps/dashboard/README.md), [`apps/extension/README.md`](apps/extension/README.md), [`apps/mcp/README.md`](apps/mcp/README.md). Backend tests need only a reachable Postgres: `npm test -w @qassistant/api`.
+The offline drivers (`STORAGE_DRIVER=local`, `SECRETS_DRIVER=local`,
+`CLOUD_TASKS_DRIVER=inline`, and a fake AI client when `GEMINI_API_KEY` is empty) need
+nothing beyond Postgres. Per-app notes: [`apps/api`](apps/api/README.md),
+[`apps/dashboard`](apps/dashboard/README.md), [`apps/extension`](apps/extension/README.md),
+[`apps/mcp`](apps/mcp/README.md).
 
-## End-to-end verification
-
-With Docker and Google Chrome installed, run the complete OpenSpec-linked E2E gate:
+Run the full end-to-end gate (Postgres + MinIO + Playwright + the HTTP/RLS suites) with:
 
 ```bash
-npm run test:e2e
+npm run test:e2e            # backend-only tests: npm test -w @qassistant/api
 ```
 
-The command starts and waits for Postgres + MinIO, runs Playwright against
-the dashboard and built extension popup, runs the production-compiled Nest HTTP
-flow plus service/RLS suites, verifies every declared controller route was
-exercised, and regenerates `docs/e2e-coverage/` only after success.
+## Self-hosting your own instance
 
-## Deploying to a self-hosted VPS
+To stand up your own production instance (this is how QAssistant Cloud itself is
+deployed), see [`infra/`](infra/): `infra/vps/bootstrap.sh` provisions a blank VPS and
+`.github/workflows/deploy.yml` deploys on every push to `main`. The operator of an
+instance is its **super-admin** (seeded with `npm run seed:super-admin`), who creates
+organisations and issues the signup links that onboard each client.
 
-Prerequisites: a VPS with SSH access, a GitHub repo with Actions enabled.
+## Repo layout
 
-```bash
-ssh root@<vps-ip> 'bash -s' < infra/vps/bootstrap.sh
+```text
+apps/api/          NestJS backend API (Drizzle + PostgreSQL row-level security)
+apps/dashboard/    React + Vite dashboard (the web app you sign in to)
+apps/extension/    Chrome MV3 extension (rrweb capture) used to record sessions
+apps/mcp/          MCP server: exposes recordings + generated tests to AI clients,
+                   records integration outcomes (never pushes to Git itself)
+packages/shared/   Shared zod schemas, enums, and TypeScript types
+infra/             Dockerfiles, Caddyfile, docker-compose, and VPS bootstrap/deploy/backup
+openspec/          Specifications, design, and change history (source of truth)
+docs/              Privacy posture, QA-manager tour, and capture/replay notes
 ```
 
-Follow the manual steps it prints (persistent `.env` with generated secrets, restricted deploy SSH key, GitHub Actions secrets `DEPLOY_SSH_HOST`/`DEPLOY_SSH_USER`/`DEPLOY_SSH_KEY`, a `backup.sh` cron entry). From then on, pushing to `main` runs `.github/workflows/deploy.yml`: it builds and pushes the `api`/`web` images to GHCR, then SSHes in to run `infra/vps/deploy.sh`, which syncs config from git, backs up Postgres, applies migrations, and rolls out the new images behind Caddy (automatic HTTPS).
+## How it's built
 
-## Key Decisions
+- **TypeScript** across the API, dashboard, extension, and shared schemas.
+- **PostgreSQL** (self-hosted) with **row-level security** keyed off the verified
+  `tenantId` as the tenant-isolation floor; **MinIO** (S3-compatible) for artifacts.
+- **Self-hosted email/password auth**: opaque, DB-backed bearer tokens (argon2id
+  hashing, 2h access / 30d rotated refresh, instant revocation). Accounts are created by
+  a super-admin or admin (directly or via a signup link), so there is no *open*
+  self-registration. Passwords require upper/lower/digit/special, min 8 characters.
+- **AI codegen** via the Gemini Developer API (key from the server's `.env`), run through
+  a Postgres-backed job queue with an in-process worker (no Redis). Test **integration**
+  into your repo is done by an AI client over the MCP server.
+- **Infrastructure**: Docker Compose on a single VPS, Caddy reverse proxy with automatic
+  HTTPS, GitHub Actions CI/CD.
 
-- Language/runtime: TypeScript for API, dashboard, extension, and shared schemas.
-- Operational datastore: self-hosted PostgreSQL (the app's own Docker container), with row-level security keyed off the verified `tenantId` as the tenant-isolation floor.
-- Artifacts: MinIO (S3-compatible) with tenant/project/session object paths.
-- Identity: self-hosted email/password auth — opaque, DB-backed bearer tokens (argon2id password hashing, 2h access / 30d rotated refresh tokens, instant revocation on disable/reset); admin-created accounts, no self-registration, forced password change on first login.
-- AI: Gemini Developer API (paid tier) with the API key from the server's persistent `.env`; model IDs supplied as config.
-- Async codegen: a Postgres-backed job table with an in-process polling worker (no Redis).
-- Infrastructure: Docker Compose on a single VPS, Caddy reverse proxy with automatic HTTPS, GitHub Actions CI/CD.
+For what is captured, masking, retention, and deletion, see
+[`docs/PRIVACY.md`](docs/PRIVACY.md).

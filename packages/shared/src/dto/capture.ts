@@ -6,22 +6,16 @@ import { sessionSchema, artifactSchema, flagSchema } from '../entities.js';
 /** Extension capture DTOs (contract section 4.4). */
 
 /**
- * POST /sessions: start a session. The client supplies projectId and work
- * context (jiraId OR description). At least one of jiraId / description is
- * required; the backend freezes context after Jira validation. tenantId / uid
- * are always server-derived, never accepted from the client (design D5).
+ * POST /sessions: start a session. The client supplies projectId and the work
+ * context: a non-empty description of what is being tested. tenantId / uid are
+ * always server-derived, never accepted from the client (design D5).
  */
-export const startSessionRequestSchema = z
-  .object({
-    projectId: uuid,
-    jiraId: nonEmptyString.optional(),
-    description: nonEmptyString.optional(),
-    // Optional per-session override of the project screenshot default.
-    screenshotEnabled: z.boolean().optional(),
-  })
-  .refine((v) => v.jiraId !== undefined || v.description !== undefined, {
-    message: 'A jiraId or a non-empty description is required',
-  });
+export const startSessionRequestSchema = z.object({
+  projectId: uuid,
+  description: nonEmptyString,
+  // Optional per-session override of the project screenshot default.
+  screenshotEnabled: z.boolean().optional(),
+});
 export type StartSessionRequest = z.infer<typeof startSessionRequestSchema>;
 
 export const sessionResponseSchema = sessionSchema;

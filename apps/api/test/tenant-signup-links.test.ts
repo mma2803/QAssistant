@@ -75,7 +75,6 @@ before(async () => {
   process.env.STORAGE_DRIVER = 'local';
   process.env.SECRETS_DRIVER = 'local';
   process.env.LOCAL_SECRETS_DIR = secretsDir;
-  process.env.JIRA_DRIVER = 'local';
   process.env.CLOUD_TASKS_DRIVER = 'inline';
   process.env.INTERNAL_TASK_TOKEN = 'local-internal-task-token';
 

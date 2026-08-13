@@ -5,9 +5,8 @@ import { InactivityService } from './inactivity.service.js';
 
 /**
  * Extension capture module (contract section 4.4). Relies on global Db / Auth /
- * Jira / Storage modules. CaptureService injects JiraValidationService (session
- * start) and the GcsSigner (upload URLs); InactivityService runs the auto-close
- * backstop on the privileged pool.
+ * Storage modules. CaptureService injects the GcsSigner (upload URLs);
+ * InactivityService runs the auto-close backstop on the privileged pool.
  */
 @Module({
   controllers: [CaptureController],

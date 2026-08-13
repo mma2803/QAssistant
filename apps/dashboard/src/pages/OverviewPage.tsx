@@ -190,7 +190,7 @@ export function OverviewPage(): JSX.Element {
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium">{s.projectName}</div>
                   <div className="text-muted-foreground truncate text-xs">
-                    {s.jiraId || s.description || t('overview.noContext')} ·{' '}
+                    {s.description || t('overview.noContext')} ·{' '}
                     {formatRelative(s.startedAt)}
                   </div>
                 </div>

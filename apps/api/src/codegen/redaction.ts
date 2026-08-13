@@ -1,9 +1,9 @@
 /**
  * Known-secret redaction (design D8c; spec "Known secrets redacted before model
- * use"). Before any captured DOM, Jira text, tester description, project
- * markdown, or screenshot-derived context is placed into a Gemini prompt, this
- * scrubs the well-known secret shapes: passwords, tokens, API keys, auth
- * headers, cookies, and bearer credentials.
+ * use"). Before any captured DOM, tester description, project markdown, or
+ * screenshot-derived context is placed into a Gemini prompt, this scrubs the
+ * well-known secret shapes: passwords, tokens, API keys, auth headers, cookies,
+ * and bearer credentials.
  *
  * This is deliberately a denylist of high-confidence patterns (D8c: MVP does not
  * require broad PII redaction or configurable custom rules). It runs over the

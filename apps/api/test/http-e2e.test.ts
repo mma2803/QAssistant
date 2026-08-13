@@ -141,7 +141,6 @@ before(async () => {
   process.env.S3_FORCE_PATH_STYLE = 'true';
   process.env.SECRETS_DRIVER = 'local';
   process.env.LOCAL_SECRETS_DIR = secretsDir;
-  process.env.JIRA_DRIVER = 'local';
   process.env.CLOUD_TASKS_DRIVER = 'inline';
   process.env.INTERNAL_TASK_TOKEN = INTERNAL_TOKEN;
   delete process.env.GEMINI_API_KEY;
@@ -492,23 +491,7 @@ describe('HTTP REST surface', () => {
     assert.equal(projFramework.body.defaultTestFramework, 'Cypress');
     assert.equal(projFramework.body.defaultTestLanguage, 'JavaScript');
 
-    const jira = await request(`/api/v1/projects/${projectId}/jira`, {
-      method: 'PUT',
-      token: adminToken,
-      body: {
-        baseUrl: 'https://jira.example.test',
-        projectKey: 'QA',
-        token: 'read-only-local-token',
-      },
-    });
-    assert.equal(jira.status, 200);
-    const jiraTest = await request<{ ok: boolean }>(`/api/v1/projects/${projectId}/jira/test`, {
-      method: 'POST',
-      token: adminToken,
-    });
-    assert.equal(jiraTest.status, 201);
-    assert.equal(jiraTest.body.ok, true);
-
+    // A session start with no work context (missing description) is rejected.
     const invalidStart = await request('/api/v1/sessions', {
       method: 'POST',
       token: qaToken,
@@ -519,7 +502,7 @@ describe('HTTP REST surface', () => {
     const started = await request<{ id: string }>('/api/v1/sessions', {
       method: 'POST',
       token: qaToken,
-      body: { projectId, jiraId: 'QA-42', screenshotEnabled: true },
+      body: { projectId, description: 'Verify the discount code flow', screenshotEnabled: true },
     });
     assert.equal(started.status, 201);
     const sessionId = started.body.id;
@@ -746,12 +729,6 @@ describe('HTTP REST surface', () => {
     );
     assert.equal(purge.status, 200);
     assert.deepEqual(purge.body.purgedSessionIds, []);
-
-    const jiraDeleted = await request(`/api/v1/projects/${projectId}/jira`, {
-      method: 'DELETE',
-      token: adminToken,
-    });
-    assert.equal(jiraDeleted.status, 204);
 
     const tenantInactive = await request<{ status: string }>(
       `/api/v1/admin/tenants/${tenantId}`,

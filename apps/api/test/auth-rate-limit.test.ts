@@ -117,7 +117,6 @@ before(async () => {
   process.env.S3_FORCE_PATH_STYLE = 'true';
   process.env.SECRETS_DRIVER = 'local';
   process.env.LOCAL_SECRETS_DIR = secretsDir;
-  process.env.JIRA_DRIVER = 'local';
   process.env.CLOUD_TASKS_DRIVER = 'inline';
   process.env.INTERNAL_TASK_TOKEN = INTERNAL_TOKEN;
   delete process.env.GEMINI_API_KEY;

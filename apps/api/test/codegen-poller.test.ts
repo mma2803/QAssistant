@@ -28,18 +28,12 @@ import {
   PostgresCloudTasksDispatcher,
   CodegenPollerService,
 } from '../src/codegen/cloud-tasks.service.js';
-import { JiraValidationService } from '../src/jira/jira-validation.service.js';
 import type { GeminiClient } from '../src/codegen/gemini.service.js';
 import { codegenJobs, generatedTests } from '../src/db/schema.js';
-import type { RequestContext } from '../src/auth/request-context.js';
 
 let h: Harness | null = null;
 let reachable = false;
 const tenantIds: string[] = [];
-
-function jiraValidationFor(ctx: RequestContext): JiraValidationService {
-  return new JiraValidationService(ctx, h!.jira, h!.secrets);
-}
 
 /** Provision a tenant + project + a stopped, work-context-having session, ready to generate against. */
 async function setUpSession(): Promise<{ admin: TenantIdentity; sessionId: string; tenantId: string }> {
@@ -59,7 +53,7 @@ async function setUpSession(): Promise<{ admin: TenantIdentity; sessionId: strin
   };
 
   const project = await h!.asTenant(admin, async (ctx) => {
-    const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx));
+    const projects = new ProjectsService(ctx);
     return projects.createProject({
       name: 'Poller project',
       baseUrl: 'https://poller.example.test',
@@ -70,7 +64,7 @@ async function setUpSession(): Promise<{ admin: TenantIdentity; sessionId: strin
   });
 
   const session = await h!.asTenant(admin, async (ctx) => {
-    const capture = new CaptureService(ctx, jiraValidationFor(ctx), h!.signer);
+    const capture = new CaptureService(ctx, h!.signer);
     const started = await capture.startSession({
       projectId: project.id,
       description: 'Poller test session',
@@ -161,7 +155,7 @@ describe('real Postgres codegen job queue', () => {
     const { admin, sessionId, tenantId } = await setUpSession();
     await enqueueRealJob(admin, sessionId);
 
-    const worker = new CodegenWorkerService(h.db, h.reader, h.secrets, h.jira, h.gemini);
+    const worker = new CodegenWorkerService(h.db, h.reader, h.gemini);
     const poller = new CodegenPollerService(h.config, h.db, (payload) => worker.runTask(payload));
 
     await (poller as unknown as { tick(): Promise<void> }).tick();
@@ -189,7 +183,7 @@ describe('real Postgres codegen job queue', () => {
         throw new Error('Gemini call timed out after 50ms');
       },
     };
-    const failingWorker = new CodegenWorkerService(h.db, h.reader, h.secrets, h.jira, alwaysFailingGemini);
+    const failingWorker = new CodegenWorkerService(h.db, h.reader, alwaysFailingGemini);
     const poller = new CodegenPollerService(h.config, h.db, (payload) => failingWorker.runTask(payload));
     const tick = () => (poller as unknown as { tick(): Promise<void> }).tick();
 

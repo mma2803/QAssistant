@@ -14,8 +14,8 @@
  * Faked boundaries:
  *   - InMemoryGcsReader: returns the bytes the test "uploaded" for a gcsPath.
  *   - FakeGeminiClient : the production offline client (asserted Playwright test).
- * Secret Manager / GCS signer / Jira client are no-op fakes: the happy
- * description-path flow never invokes them (proven by the throwing stubs).
+ * Secret Manager / GCS signer are no-op fakes: the happy description-path flow
+ * never invokes them (proven by the throwing stubs).
  */
 import { gzipSync } from 'node:zlib';
 import { loadConfig, type AppConfig } from '../../src/config/config.service.js';
@@ -27,7 +27,6 @@ import { IdentityService } from '../../src/auth/identity.service.js';
 import type { GcsReader } from '../../src/storage/gcs-reader.service.js';
 import type { GcsSigner } from '../../src/storage/gcs-signer.service.js';
 import type { SecretManager } from '../../src/secrets/secret-manager.service.js';
-import type { JiraClient } from '../../src/jira/jira-client.service.js';
 import { FakeGeminiClient } from '../../src/codegen/gemini.service.js';
 import { InlineCloudTasksDispatcher } from '../../src/codegen/cloud-tasks.service.js';
 import { CodegenWorkerService } from '../../src/codegen/codegen-worker.service.js';
@@ -94,14 +93,6 @@ const noopSecrets: SecretManager = {
     return `local://${secretId}`;
   },
 };
-const throwingJira: JiraClient = {
-  async getIssue() {
-    throw new Error('JiraClient should not be called in the description-path flow');
-  },
-  async getIssueContext() {
-    throw new Error('JiraClient should not be called in the description-path flow');
-  },
-};
 
 export interface Harness {
   config: AppConfig;
@@ -112,7 +103,6 @@ export interface Harness {
   reader: InMemoryGcsReader;
   signer: GcsSigner;
   secrets: SecretManager;
-  jira: JiraClient;
   gemini: FakeGeminiClient;
   worker: CodegenWorkerService;
   dispatcher: InlineCloudTasksDispatcher;
@@ -135,7 +125,7 @@ export async function buildHarness(): Promise<Harness> {
 
   // Real worker wired to the real DbService + fakes; the inline dispatcher runs
   // it synchronously, exactly like the dev CLOUD_TASKS_DRIVER=inline path.
-  const worker = new CodegenWorkerService(db, reader, noopSecrets, throwingJira, gemini);
+  const worker = new CodegenWorkerService(db, reader, gemini);
   const dispatcher = new InlineCloudTasksDispatcher((payload) => worker.runTask(payload));
 
   async function asTenant<T>(
@@ -163,7 +153,6 @@ export async function buildHarness(): Promise<Harness> {
     reader,
     signer: throwingSigner,
     secrets: noopSecrets,
-    jira: throwingJira,
     gemini,
     worker,
     dispatcher,

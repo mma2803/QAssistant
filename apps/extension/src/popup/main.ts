@@ -10,7 +10,7 @@ import { call } from './client.js';
  * state machine that renders one of: sign-in, forced password change, the
  * session-start form, or the active-recording view. All work happens in the
  * service worker; this only issues commands and surfaces server errors verbatim
- * (the work-context gate, Jira validation, and must_change_password are all
+ * (the work-context gate and must_change_password are all
  * enforced server-side, per the spec).
  */
 
@@ -203,7 +203,6 @@ async function renderStart(): Promise<void> {
     projectSelect.append(el('option', { value: p.id, textContent: p.name }));
   }
 
-  const jira = el('input', { type: 'text', placeholder: t('start.jira.placeholder') });
   const description = el('textarea', { placeholder: t('start.description.placeholder') });
 
   const screenshot = el('input', { type: 'checkbox' }) as HTMLInputElement;
@@ -221,7 +220,6 @@ async function renderStart(): Promise<void> {
 
   view.append(
     el('label', {}, [t('start.project.label'), projectSelect]),
-    el('label', {}, [t('start.jira.label'), jira]),
     el('label', {}, [t('start.description.label'), description]),
     screenshotLabel,
     el('p', {
@@ -234,13 +232,11 @@ async function renderStart(): Promise<void> {
 
   start.addEventListener('click', () => {
     showError(null);
-    const jiraId = jira.value.trim() || undefined;
     const desc = description.value.trim() || undefined;
     // Local pre-check mirrors the schema for fast feedback; the server is the
-    // authority (work-context gate + Jira validation).
+    // authority (work-context gate). A non-empty description is required.
     const parsed = startSessionRequestSchema.safeParse({
       projectId: projectSelect.value,
-      jiraId,
       description: desc,
       screenshotEnabled: screenshot.checked,
     });
@@ -254,14 +250,13 @@ async function renderStart(): Promise<void> {
       const res = await call<Session>({
         type: 'session:start',
         projectId: projectSelect.value,
-        jiraId,
         description: desc,
         screenshotEnabled: screenshot.checked,
       });
       start.disabled = false;
       start.textContent = t('start.submit');
       if (!res.ok) {
-        // Surface server gate/Jira errors verbatim (e.g. jira_validation_failed).
+        // Surface server gate errors verbatim.
         showError(res.error.message);
         return;
       }
@@ -275,9 +270,7 @@ async function renderStart(): Promise<void> {
 
 function renderActive(state: ActiveSessionState): void {
   clear();
-  const ctx = state.session.jiraId
-    ? t('active.contextJira', { id: state.session.jiraId })
-    : (state.session.description ?? state.project.name);
+  const ctx = state.session.description ?? state.project.name;
 
   const stop = el('button', { className: 'danger', textContent: t('active.stop') });
 

@@ -46,9 +46,7 @@ import { CodegenService } from '../src/codegen/codegen.service.js';
 import { TenantSettingsService } from '../src/tenant-settings/tenant-settings.service.js';
 import { DEFAULT_PROJECT_KNOWLEDGE_MD } from '@qassistant/shared';
 import { DashboardService } from '../src/dashboard/dashboard.service.js';
-import { JiraValidationService } from '../src/jira/jira-validation.service.js';
 import { artifactObjectPath } from '../src/storage/gcs-signer.service.js';
-import type { RequestContext } from '../src/auth/request-context.js';
 
 let h: Harness | null = null;
 let reachable = false;
@@ -96,7 +94,6 @@ after(async () => {
           'flags',
           'artifacts',
           'sessions',
-          'jira_configs',
           'projects',
           'tenant_users',
         ]) {
@@ -206,7 +203,7 @@ describe('end-to-end MVP flow (service layer)', () => {
   it('4. admin creates a project', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     const project = await h.asTenant(admin, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       return projects.createProject({
         name: 'Checkout app',
         baseUrl: 'https://checkout.acme.test',
@@ -225,29 +222,28 @@ describe('end-to-end MVP flow (service layer)', () => {
   it('5. qa-engineer starts a project + work-context-gated session', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
 
-    // No work context (no jiraId, no description) is rejected by the service gate.
+    // No work context (no description) is rejected by the service gate.
     await assert.rejects(
       () =>
         h!.asTenant(qa, async (ctx) => {
-          const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+          const capture = new CaptureService(ctx, h!.signer);
           // Bypass the DTO refinement to prove the SERVICE gate, not just Zod.
           return capture.startSession({ projectId } as never);
         }),
-      /work|description|jira|required/i,
+      /work|description|required/i,
       'a session with no work context is blocked by CaptureService',
     );
 
     // With a non-empty description, the session is created; recorded_by is the
     // server-derived acting user (never client-supplied).
     const session = await h.asTenant(qa, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.startSession({ projectId, description: 'Verify the discount code flow' });
     });
     sessionId = session.id;
     assert.equal(session.status, 'active');
     assert.equal(session.recordedBy, qa.actingUserId, 'recorded_by stamped to the acting user');
     assert.equal(session.description, 'Verify the discount code flow');
-    assert.equal(session.jiraId, null);
   });
 
   it('6. dom_chunk + screenshot artifacts are registered and made readable', async (t) => {
@@ -259,7 +255,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     h.reader.put(shotPath, Buffer.from('fake-webp-bytes'));
 
     const [dom, shot] = await h.asTenant(qa, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       const d = await capture.registerArtifact(sessionId, {
         type: 'dom_chunk',
         seq: 0,
@@ -288,7 +284,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     await assert.rejects(
       () =>
         h!.asTenant(qa, async (ctx) => {
-          const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+          const capture = new CaptureService(ctx, h!.signer);
           return capture.registerArtifact(sessionId, {
             type: 'screenshot',
             seq: 1,
@@ -307,7 +303,7 @@ describe('end-to-end MVP flow (service layer)', () => {
   it('7. session is stopped (completed, ended_at set)', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     const stopped = await h.asTenant(qa, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.stopSession(sessionId);
     });
     assert.equal(stopped.status, 'completed');
@@ -414,7 +410,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     await assert.rejects(
       () =>
         h!.asTenant(admin, async (ctx) => {
-          const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+          const projects = new ProjectsService(ctx);
           return projects.createProject({
             name: 'Checkout app',
             baseUrl: 'https://duplicate.acme.test',
@@ -432,7 +428,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     await assert.rejects(
       () =>
         h!.asTenant(qa, async (ctx) => {
-          const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+          const capture = new CaptureService(ctx, h!.signer);
           return capture.startSession({
             projectId: newId(),
             description: 'This project does not exist',
@@ -445,36 +441,24 @@ describe('end-to-end MVP flow (service layer)', () => {
   it('12. an inactive project blocks session start', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     await h.asTenant(admin, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       await projects.updateProject(projectId, { status: 'inactive' });
     });
     try {
       await assert.rejects(
         () =>
           h!.asTenant(qa, async (ctx) => {
-            const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+            const capture = new CaptureService(ctx, h!.signer);
             return capture.startSession({ projectId, description: 'Blocked while inactive' });
           }),
         /inactive/i,
       );
     } finally {
       await h.asTenant(admin, async (ctx) => {
-        const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+        const projects = new ProjectsService(ctx);
         await projects.updateProject(projectId, { status: 'active' });
       });
     }
-  });
-
-  it('13. a Jira ID without project Jira configuration is rejected', async (t) => {
-    if (!reachable || !h) return t.skip('no Postgres');
-    await assert.rejects(
-      () =>
-        h!.asTenant(qa, async (ctx) => {
-          const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
-          return capture.startSession({ projectId, jiraId: 'QA-404' });
-        }),
-      /no active Jira configuration/i,
-    );
   });
 
   it('14. a non-owner qa-engineer cannot generate for another recorder', async (t) => {
@@ -736,11 +720,11 @@ describe('end-to-end MVP flow (service layer)', () => {
   it('25. stopping an already completed session is idempotent', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     const first = await h.asTenant(qa, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.stopSession(sessionId);
     });
     const second = await h.asTenant(qa, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.stopSession(sessionId);
     });
     assert.equal(second.status, 'completed');
@@ -753,7 +737,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     await assert.rejects(
       () =>
         h!.asTenant(qa, async (ctx) => {
-          const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+          const capture = new CaptureService(ctx, h!.signer);
           return capture.createFlag(sessionId, { selector: '#late-write' });
         }),
       /capture writes are closed|not active/i,
@@ -763,7 +747,7 @@ describe('end-to-end MVP flow (service layer)', () => {
   it('27. project knowledge updates persist through project reads', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     const updated = await h.asTenant(admin, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       return projects.setKnowledge(projectId, {
         knowledgeMd: '# Checkout\n\nPrefer data-testid selectors.',
         defaultCredsSecretRef: null,
@@ -771,7 +755,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     });
     assert.match(updated.knowledgeMd ?? '', /data-testid/);
     const read = await h.asTenant(qa, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       return projects.getProject(projectId);
     });
     assert.equal(read.knowledgeMd, updated.knowledgeMd);
@@ -780,7 +764,7 @@ describe('end-to-end MVP flow (service layer)', () => {
   it('27b. the seeded knowledge hub can be cleared to empty', async (t) => {
     if (!reachable || !h) return t.skip('no Postgres');
     const cleared = await h.asTenant(admin, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       return projects.setKnowledge(projectId, { knowledgeMd: null, defaultCredsSecretRef: null });
     });
     assert.equal(cleared.knowledgeMd, null, 'admin can clear the hub after it was seeded');
@@ -865,7 +849,7 @@ describe('end-to-end MVP flow (service layer)', () => {
     // Tenant default is Selenium/Java (set in #30). Give the PROJECT a different
     // default and generate with no override -> the project default must win.
     await h.asTenant(qa, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       await projects.setTestFramework(projectId, {
         defaultTestFramework: 'Cypress',
         defaultTestLanguage: 'JavaScript',
@@ -884,7 +868,7 @@ describe('end-to-end MVP flow (service layer)', () => {
 
     // Clear the project default (null) -> generation falls back to the tenant default.
     await h.asTenant(qa, async (ctx) => {
-      const projects = new ProjectsService(ctx, h!.secrets, jiraValidationFor(ctx, h!));
+      const projects = new ProjectsService(ctx);
       await projects.setTestFramework(projectId, {
         defaultTestFramework: null,
         defaultTestLanguage: null,
@@ -902,8 +886,3 @@ describe('end-to-end MVP flow (service layer)', () => {
     assert.equal(afterClear.language, 'Java');
   });
 });
-
-/** Construct a real JiraValidationService for a request (unused on the description path). */
-function jiraValidationFor(ctx: RequestContext, harness: Harness): JiraValidationService {
-  return new JiraValidationService(ctx, harness.jira, harness.secrets);
-}

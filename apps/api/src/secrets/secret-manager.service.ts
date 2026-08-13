@@ -10,9 +10,9 @@ import { DbService } from '../db/db.service.js';
 import { encryptedSecrets } from '../db/schema.js';
 
 /**
- * Secret Manager abstraction (contract sections 3.4, 5). Project Jira tokens and
- * default-creds live only encrypted; the DB stores a `token_secret_ref`
- * resource name, never the plaintext secret value (design D-Jira).
+ * Secret Manager abstraction (contract sections 3.4, 5). Project default-creds
+ * live only encrypted; the DB stores a `*_secret_ref` resource name, never the
+ * plaintext secret value.
  *
  * Two drivers behind one interface:
  *   - 'postgres' : envelope-encrypted (AES-256-GCM) value in the
@@ -27,8 +27,7 @@ import { encryptedSecrets } from '../db/schema.js';
  *                  ref, so offline dev works without a database. Never used
  *                  in prod.
  *
- * A ref is an opaque resource name, e.g. for the project Jira token the stable
- * id `qassistant-jira-token-<projectId>`; rotation overwrites the stored value
+ * A ref is an opaque resource name; rotation overwrites the stored value
  * (contract 3.4: "row unchanged").
  */
 export interface SecretManager {
@@ -43,11 +42,6 @@ export interface SecretManager {
 }
 
 export const SECRET_MANAGER = Symbol('SECRET_MANAGER');
-
-/** Deterministic secret id for a project's Jira token. */
-export function jiraTokenSecretId(projectId: string): string {
-  return `qassistant-jira-token-${projectId}`;
-}
 
 @Injectable()
 export class LocalSecretManager implements SecretManager {

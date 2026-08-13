@@ -25,8 +25,8 @@ Automatiser un scénario demande du temps et des compétences de dev. Résultat 
 prennent du retard, les régressions passent.
 
 Avec QAssistant, chaque test **déjà joué à la main** par vos testeurs est capitalisé : la
-session réelle (DOM, appels réseau, états flaggés) devient un test automatisé réutilisable.
-Autant de **gain de temps**, et une couverture qui grandit à chaque campagne.
+session réelle, telle qu'elle a été vécue, devient un test automatisé réutilisable. Autant
+de **gain de temps**, et une couverture qui grandit à chaque campagne.
 
 | | Aujourd'hui | Avec QAssistant |
 |---|:---|:---|
@@ -51,25 +51,25 @@ Autant de **gain de temps**, et une couverture qui grandit à chaque campagne.
 </tr>
 </table>
 
-**1. Enregistrez.** Le testeur déroule son scénario directement sur le site à tester,
-depuis son navigateur. QAssistant capture en arrière-plan : DOM, appels réseau réels,
-captures d'écran, et les états qu'il « flague » comme importants.
+**1. Enregistrez.** Votre testeur fait simplement son travail : il déroule son scénario dans
+le navigateur, comme d'habitude. Rien de nouveau à apprendre. QAssistant enregistre en
+arrière-plan tout ce qu'il faut pour rejouer et automatiser la session.
 
-**2. Cadrez la génération.** Choisissez le framework et le langage (au choix, personnalisé,
-ou celui par défaut du projet) et le type de test : **UI** ou **API / backend**.
+**2. Cadrez.** En quelques clics, vous choisissez le type de test (**interface** ou
+**back-end**) et l'outil cible. Aucune ligne de code.
 
-**3. Générez avec l'agent IA.** Un agent transforme la session en test à partir des
-artefacts captés, de votre description et de la connaissance du projet. Régénérez autant de
-fois que nécessaire, avec vos consignes, jusqu'à la bonne version.
+**3. Générez.** L'IA transforme la session en test automatisé, sous vos yeux. Pas
+satisfait ? Vous relancez avec une simple consigne, jusqu'à la bonne version. Zéro
+compétence de développeur requise côté équipe.
 
-**4. Approuvez.** Quand une version vous convient, approuvez-la : elle bascule en statut
-**« ready to integrate »**.
+**4. Approuvez.** Vous validez la version qui vous convient. Vous gardez la main de bout
+en bout.
 
-**5. Intégrez via MCP.** Vous déclenchez l'intégration : via le serveur MCP local
-(Claude Code), l'agent ajoute le test au dépôt, le lance, committe s'il passe et le marque
-**« integrated »**. Sinon **« failed_to_integrate »**, sans rien pousser.
+**5. Intégrez.** Un clic ajoute le test à votre suite automatisée, prêt à tourner à chaque
+livraison. Et uniquement après qu'il a été **réellement exécuté et réussi**.
 
-> **Le run est le juge.** On ne garde au dépôt que ce qui passe.
+> **Chaque test est exécuté avant d'être conservé.** Vous ne gardez que ce qui passe vraiment,
+> jamais un « faux vert ».
 
 ---
 

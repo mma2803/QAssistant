@@ -267,7 +267,6 @@ export async function cleanupTenants(pools: Pools, tenantIds: string[]): Promise
       'flags',
       'artifacts',
       'sessions',
-      'jira_configs',
       'projects',
       'tenant_users',
     ]) {

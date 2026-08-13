@@ -23,9 +23,6 @@ export type UserStatus = (typeof USER_STATUSES)[number];
 export const PROJECT_STATUSES = ['active', 'inactive'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
-export const JIRA_STATUSES = ['active', 'inactive'] as const;
-export type JiraStatus = (typeof JIRA_STATUSES)[number];
-
 export const SESSION_STATUSES = ['active', 'completed'] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
@@ -103,7 +100,6 @@ export const ERROR_CODES = [
   'forbidden',
   'not_found',
   'validation_failed',
-  'jira_validation_failed',
   'must_change_password',
   'conflict',
 ] as const;

@@ -31,10 +31,8 @@ import { buildHarness, type Harness, type TenantIdentity } from './helpers/app.j
 import { AdminService } from '../src/admin/admin.service.js';
 import { CaptureService } from '../src/capture/capture.service.js';
 import { CodegenService } from '../src/codegen/codegen.service.js';
-import { JiraValidationService } from '../src/jira/jira-validation.service.js';
 import { artifactObjectPath } from '../src/storage/gcs-signer.service.js';
 import { ProjectsService } from '../src/projects/projects.service.js';
-import type { RequestContext } from '../src/auth/request-context.js';
 
 let h: Harness | null = null;
 let reachable = false;
@@ -65,7 +63,6 @@ after(async () => {
           'flags',
           'artifacts',
           'sessions',
-          'jira_configs',
           'projects',
           'tenant_users',
         ]) {
@@ -107,7 +104,7 @@ async function provisionSession(harness: Harness): Promise<{
   };
 
   const project = await harness.asTenant(admin, async (ctx) => {
-    const projects = new ProjectsService(ctx, harness.secrets, jiraValidationFor(ctx, harness));
+    const projects = new ProjectsService(ctx);
     return projects.createProject({
       name: 'Resilience app',
       baseUrl: 'https://resilience.acme.test',
@@ -119,16 +116,12 @@ async function provisionSession(harness: Harness): Promise<{
   const projectId = project.id;
 
   const session = await harness.asTenant(admin, async (ctx) => {
-    const capture = new CaptureService(ctx, jiraValidationFor(ctx, harness), harness.signer);
+    const capture = new CaptureService(ctx, harness.signer);
     return capture.startSession({ projectId, description: 'Verify resilience under storage failure' });
   });
   const sessionId = session.id;
 
   return { tenantId, admin, projectId, sessionId };
-}
-
-function jiraValidationFor(ctx: RequestContext, harness: Harness): JiraValidationService {
-  return new JiraValidationService(ctx, harness.jira, harness.secrets);
 }
 
 describe('artifact resilience: no upload verification, storage failure during generation', () => {
@@ -147,7 +140,7 @@ describe('artifact resilience: no upload verification, storage failure during ge
     // Deliberately do NOT call h.reader.put(...)/putDomChunk(...) -- the bytes
     // are never staged in the fake in-memory reader (i.e. never "uploaded").
     const registered = await h.asTenant(admin, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.registerArtifact(sessionId, {
         type: 'dom_chunk',
         seq: 0,
@@ -180,7 +173,7 @@ describe('artifact resilience: no upload verification, storage failure during ge
     // Stop the session, matching e2e-flow's order (register while active, then
     // stop) -- not load-bearing for this assertion, kept for setup parity.
     await h.asTenant(admin, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.stopSession(sessionId);
     });
   });
@@ -205,7 +198,7 @@ describe('artifact resilience: no upload verification, storage failure during ge
     // "never put() -> resolves to null" behavior (matching LocalGcsReader),
     // which loadDomReplay's `if (!bytes) continue;` would just skip gracefully.
     await h.asTenant(admin, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.registerArtifact(sessionId, {
         type: 'dom_chunk',
         seq: 0,
@@ -221,7 +214,7 @@ describe('artifact resilience: no upload verification, storage failure during ge
     // Stop the session (mirrors e2e-flow's order: register while active, then
     // stop, then generate).
     await h.asTenant(admin, async (ctx) => {
-      const capture = new CaptureService(ctx, jiraValidationFor(ctx, h!), h!.signer);
+      const capture = new CaptureService(ctx, h!.signer);
       return capture.stopSession(sessionId);
     });
 

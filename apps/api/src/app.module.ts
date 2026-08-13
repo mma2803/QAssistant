@@ -9,7 +9,6 @@ import { UsersModule } from './users/users.module.js';
 import { AuthRoutesModule } from './auth-routes/auth-routes.module.js';
 import { SecretsModule } from './secrets/secrets.module.js';
 import { StorageModule } from './storage/storage.module.js';
-import { JiraModule } from './jira/jira.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { CaptureModule } from './capture/capture.module.js';
 import { CodegenModule } from './codegen/codegen.module.js';
@@ -49,7 +48,6 @@ const FEATURE_MODULES: NonNullable<unknown>[] = [
   // Capture (section 3): support globals + project setup + extension capture.
   SecretsModule,
   StorageModule,
-  JiraModule,
   ProjectsModule,
   CaptureModule,
   // Knowledge & codegen (section 4.5): Gemini routing, async generation, review.

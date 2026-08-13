@@ -31,7 +31,6 @@ import {
   TENANT_STATUSES,
   USER_STATUSES,
   PROJECT_STATUSES,
-  JIRA_STATUSES,
   SESSION_STATUSES,
   SESSION_CLOSE_REASONS,
   ARTIFACT_TYPES,
@@ -161,36 +160,6 @@ export const projects = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// 3.4 jira_configs
-// ---------------------------------------------------------------------------
-export const jiraConfigs = pgTable(
-  'jira_configs',
-  {
-    id: uuid('id').primaryKey(),
-    tenantId: uuid('tenant_id').notNull(),
-    projectId: uuid('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'restrict' }),
-    baseUrl: text('base_url').notNull(),
-    projectKey: text('project_key').notNull(),
-    tokenSecretRef: text('token_secret_ref').notNull(),
-    status: text('status').notNull().default('active'),
-    createdAt,
-    updatedAt,
-  },
-  (t) => ({
-    projectUnique: uniqueIndex('jira_configs_project_id_key').on(t.projectId),
-    tenantIdIdx: index('jira_configs_tenant_id_idx').on(t.tenantId),
-    tenantProjectFk: foreignKey({
-      columns: [t.tenantId, t.projectId],
-      foreignColumns: [projects.tenantId, projects.id],
-      name: 'jira_configs_tenant_project_fk',
-    }).onDelete('restrict'),
-    statusCheck: check('jira_configs_status_check', inList('status', JIRA_STATUSES)),
-  }),
-);
-
-// ---------------------------------------------------------------------------
 // 3.5 sessions
 // ---------------------------------------------------------------------------
 export const sessions = pgTable(
@@ -204,10 +173,7 @@ export const sessions = pgTable(
     recordedBy: uuid('recorded_by')
       .notNull()
       .references(() => tenantUsers.id, { onDelete: 'restrict' }),
-    jiraId: text('jira_id'),
-    jiraSummary: text('jira_summary'),
-    jiraStatus: text('jira_status'),
-    description: text('description'),
+    description: text('description').notNull(),
     screenshotEnabled: boolean('screenshot_enabled').notNull(),
     status: text('status').notNull().default('active'),
     closeReason: text('close_reason'),
@@ -229,10 +195,6 @@ export const sessions = pgTable(
       foreignColumns: [projects.tenantId, projects.id],
       name: 'sessions_tenant_project_fk',
     }).onDelete('restrict'),
-    workContextCheck: check(
-      'sessions_work_context_check',
-      sql`jira_id IS NOT NULL OR description IS NOT NULL`,
-    ),
     statusCheck: check('sessions_status_check', inList('status', SESSION_STATUSES)),
     closeReasonCheck: check(
       'sessions_close_reason_check',
@@ -525,7 +487,7 @@ export const codegenJobs = pgTable(
 // ---------------------------------------------------------------------------
 // 3.13 encrypted_secrets (self-hosted Secret Manager replacement, migration 0009)
 // ---------------------------------------------------------------------------
-// Envelope-encrypted secret values (Jira tokens, project default creds). Value
+// Envelope-encrypted secret values (project default creds). Value
 // is AES-256-GCM-encrypted application-side with SECRETS_ENCRYPTION_KEY (which
 // lives only in the server .env, never in this table); `value` is an opaque
 // base64 blob encoding iv + authTag + ciphertext. No RLS: mediated entirely
@@ -541,7 +503,6 @@ export const encryptedSecrets = pgTable('encrypted_secrets', {
 export const TENANT_SCOPED_TABLES = [
   'tenant_users',
   'projects',
-  'jira_configs',
   'sessions',
   'artifacts',
   'flags',
@@ -553,7 +514,6 @@ export const schema = {
   tenants,
   tenantUsers,
   projects,
-  jiraConfigs,
   sessions,
   artifacts,
   flags,

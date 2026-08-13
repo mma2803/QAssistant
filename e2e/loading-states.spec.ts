@@ -17,7 +17,7 @@ test('shows a loading state while recordings are fetched, then renders the list'
 
   await expect(page.locator('[data-slot="skeleton"]').first()).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Checkout' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Checkout', exact: true })).toBeVisible();
 });
 
 test('shows a loading state while projects are fetched, then renders the project list', async ({ page }) => {

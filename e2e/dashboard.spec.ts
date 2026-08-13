@@ -11,7 +11,7 @@ test('browses, filters, exports, and deletes recordings', async ({ page }) => {
   await page.goto('/sessions');
 
   await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Checkout' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Checkout', exact: true })).toBeVisible();
   await chooseOption(page, 'Project', 'Checkout');
   await chooseOption(page, 'Status', 'Completed');
   await expect.poll(() => requests.some((request) => request.pathname === '/api/v1/dashboard/sessions' && request.search.includes(`projectId=${ids.project}`) && request.search.includes('status=completed'))).toBe(true);

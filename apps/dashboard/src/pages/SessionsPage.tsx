@@ -178,7 +178,7 @@ export function SessionsPage(): JSX.Element {
       if (to !== null && started > to) return false;
       if (
         q &&
-        ![s.projectName, s.jiraId, s.description, s.recordedByEmail]
+        ![s.projectName, s.description, s.recordedByEmail]
           .filter(Boolean)
           .some((v) => v!.toLowerCase().includes(q))
       )
@@ -514,13 +514,7 @@ export function SessionsPage(): JSX.Element {
                     </TableCell>
                     <TableCell className="font-medium">{s.projectName}</TableCell>
                     <TableCell className="text-muted-foreground max-w-56 truncate">
-                      {s.jiraId ? (
-                        <span title={s.jiraSummary ?? ''}>{s.jiraId}</span>
-                      ) : s.description ? (
-                        s.description
-                      ) : (
-                        '—'
-                      )}
+                      {s.description ? s.description : '—'}
                     </TableCell>
                     {isAdmin && (
                       <TableCell className="text-muted-foreground">

@@ -1,9 +1,7 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
-  HttpCode,
   Param,
   Patch,
   Post,
@@ -14,15 +12,11 @@ import {
   updateProjectRequestSchema,
   setKnowledgeRequestSchema,
   setProjectTestFrameworkRequestSchema,
-  setJiraConfigRequestSchema,
   type CreateProjectRequest,
   type UpdateProjectRequest,
   type SetKnowledgeRequest,
   type SetProjectTestFrameworkRequest,
-  type SetJiraConfigRequest,
   type Project,
-  type JiraConfig,
-  type JiraTestResponse,
 } from '@qassistant/shared';
 import { Roles } from '../auth/decorators.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
@@ -86,27 +80,5 @@ export class ProjectsController {
     body: SetProjectTestFrameworkRequest,
   ): Promise<Project> {
     return this.projects.setTestFramework(projectId, body);
-  }
-
-  @Put(':projectId/jira')
-  @Roles('admin')
-  setJiraConfig(
-    @Param('projectId') projectId: string,
-    @Body(new ZodValidationPipe(setJiraConfigRequestSchema)) body: SetJiraConfigRequest,
-  ): Promise<JiraConfig> {
-    return this.projects.setJiraConfig(projectId, body);
-  }
-
-  @Delete(':projectId/jira')
-  @Roles('admin')
-  @HttpCode(204)
-  async deleteJiraConfig(@Param('projectId') projectId: string): Promise<void> {
-    await this.projects.deleteJiraConfig(projectId);
-  }
-
-  @Post(':projectId/jira/test')
-  @Roles('admin')
-  testJiraConfig(@Param('projectId') projectId: string): Promise<JiraTestResponse> {
-    return this.projects.testJiraConfig(projectId);
   }
 }

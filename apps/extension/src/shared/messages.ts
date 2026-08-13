@@ -50,7 +50,6 @@ export type PopupRequest =
   | {
       type: 'session:start';
       projectId: string;
-      jiraId?: string;
       description?: string;
       screenshotEnabled?: boolean;
     }

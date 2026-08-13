@@ -4,7 +4,7 @@ These directories are created by the foundation phase as a home for feature
 agents. They are empty on purpose. Each feature module should:
 
 - live in its own folder (`admin/`, `users/`, `projects/`, `capture/`,
-  `codegen/`, `dashboard/`, plus support folders `jira/`, `storage/`);
+  `codegen/`, `dashboard/`, plus support folder `storage/`);
 - inject the global foundational providers rather than re-creating them:
   - `APP_CONFIG` token (`config/config.module.ts`) for typed `AppConfig`;
   - `DbService` (`db/db.service.ts`) for the per-request transaction

@@ -5,7 +5,6 @@ import {
   TENANT_STATUSES,
   USER_STATUSES,
   PROJECT_STATUSES,
-  JIRA_STATUSES,
   SESSION_STATUSES,
   SESSION_CLOSE_REASONS,
   ARTIFACT_TYPES,
@@ -70,28 +69,12 @@ export const projectSchema = z.object({
 });
 export type Project = z.infer<typeof projectSchema>;
 
-export const jiraConfigSchema = z.object({
-  id: uuid,
-  tenantId: uuid,
-  projectId: uuid,
-  baseUrl: z.string().url(),
-  projectKey: z.string(),
-  // tokenSecretRef intentionally omitted from API reads; tokens never leave the encrypted secrets store.
-  status: z.enum(JIRA_STATUSES),
-  createdAt: isoTimestamp,
-  updatedAt: isoTimestamp,
-});
-export type JiraConfig = z.infer<typeof jiraConfigSchema>;
-
 export const sessionSchema = z.object({
   id: uuid,
   tenantId: uuid,
   projectId: uuid,
   recordedBy: uuid,
-  jiraId: z.string().nullable(),
-  jiraSummary: z.string().nullable(),
-  jiraStatus: z.string().nullable(),
-  description: z.string().nullable(),
+  description: z.string(),
   screenshotEnabled: z.boolean(),
   status: z.enum(SESSION_STATUSES),
   closeReason: z.enum(SESSION_CLOSE_REASONS).nullable(),

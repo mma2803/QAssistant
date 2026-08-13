@@ -1,45 +1,28 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { and, asc, eq } from 'drizzle-orm';
 import type {
   CreateProjectRequest,
   UpdateProjectRequest,
   SetKnowledgeRequest,
   SetProjectTestFrameworkRequest,
-  SetJiraConfigRequest,
-  JiraTestResponse,
   Project,
-  JiraConfig,
 } from '@qassistant/shared';
 import { DEFAULT_PROJECT_KNOWLEDGE_MD } from '@qassistant/shared';
 import { RequestContext } from '../auth/request-context.js';
 import { AppException } from '../auth/errors.js';
-import { jiraConfigs, projects } from '../db/schema.js';
+import { projects } from '../db/schema.js';
 import { newId } from '../db/id.js';
-import { toProject, toJiraConfig } from '../common/serializers.js';
-import {
-  SECRET_MANAGER,
-  jiraTokenSecretId,
-  type SecretManager,
-} from '../secrets/secret-manager.service.js';
-import { JiraValidationService } from '../jira/jira-validation.service.js';
+import { toProject } from '../common/serializers.js';
 
 /**
  * Project setup (contract section 4.3). Mutations are admin-only (enforced by the
  * controller role guard); reads (list/detail) are open to any tenant user so the
  * extension and dashboard can resolve projects. Every query runs in the
  * RLS-scoped request transaction with an explicit tenant_id predicate (D10).
- *
- * Jira tokens never touch the DB: the plaintext token is written to Secret
- * Manager and only the resource ref (token_secret_ref) is stored on the row
- * (contract 3.4; spec "Jira token manually replaced" = overwrite the secret).
  */
 @Injectable()
 export class ProjectsService {
-  constructor(
-    private readonly ctx: RequestContext,
-    @Inject(SECRET_MANAGER) private readonly secrets: SecretManager,
-    private readonly jiraValidation: JiraValidationService,
-  ) {}
+  constructor(private readonly ctx: RequestContext) {}
 
   private requireTenant(): string {
     const tenantId = this.ctx.tenantId;
@@ -181,89 +164,6 @@ export class ProjectsService {
       .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
       .returning();
     return toProject(row!);
-  }
-
-  /**
-   * PUT /projects/{id}/jira: create or replace the project's Jira config. The
-   * token goes to the encrypted secrets store (overwrite on replace = rotation, contract
-   * 3.4); the row stores only the ref. At most one config per project.
-   */
-  async setJiraConfig(projectId: string, input: SetJiraConfigRequest): Promise<JiraConfig> {
-    const tenantId = this.requireTenant();
-    await this.loadProjectRow(projectId);
-
-    const secretId = jiraTokenSecretId(projectId);
-    const tokenSecretRef = await this.secrets.putSecret(secretId, input.token);
-
-    const existing = await this.ctx.dbTx
-      .select()
-      .from(jiraConfigs)
-      .where(and(eq(jiraConfigs.tenantId, tenantId), eq(jiraConfigs.projectId, projectId)))
-      .limit(1);
-
-    if (existing[0]) {
-      const [row] = await this.ctx.dbTx
-        .update(jiraConfigs)
-        .set({
-          baseUrl: input.baseUrl,
-          projectKey: input.projectKey,
-          tokenSecretRef,
-          status: 'active',
-          updatedAt: new Date(),
-        })
-        .where(and(eq(jiraConfigs.id, existing[0].id), eq(jiraConfigs.tenantId, tenantId)))
-        .returning();
-      return toJiraConfig(row!);
-    }
-
-    const [row] = await this.ctx.dbTx
-      .insert(jiraConfigs)
-      .values({
-        id: newId(),
-        tenantId,
-        projectId,
-        baseUrl: input.baseUrl,
-        projectKey: input.projectKey,
-        tokenSecretRef,
-        status: 'active',
-      })
-      .returning();
-    return toJiraConfig(row!);
-  }
-
-  /** DELETE /projects/{id}/jira: remove the config row and its secret. */
-  async deleteJiraConfig(projectId: string): Promise<void> {
-    const tenantId = this.requireTenant();
-    await this.loadProjectRow(projectId);
-    const deleted = await this.ctx.dbTx
-      .delete(jiraConfigs)
-      .where(and(eq(jiraConfigs.tenantId, tenantId), eq(jiraConfigs.projectId, projectId)))
-      .returning({ id: jiraConfigs.id });
-    if (deleted.length === 0) {
-      throw new AppException('not_found', 'Jira configuration not found', HttpStatus.NOT_FOUND);
-    }
-    // Best-effort secret cleanup; row removal is the source of truth.
-    await this.secrets.deleteSecret(jiraTokenSecretId(projectId));
-  }
-
-  /** POST /projects/{id}/jira/test: read-only connectivity check of the token. */
-  async testJiraConfig(projectId: string): Promise<JiraTestResponse> {
-    const tenantId = this.requireTenant();
-    await this.loadProjectRow(projectId);
-    const rows = await this.ctx.dbTx
-      .select()
-      .from(jiraConfigs)
-      .where(and(eq(jiraConfigs.tenantId, tenantId), eq(jiraConfigs.projectId, projectId)))
-      .limit(1);
-    const config = rows[0];
-    if (!config) {
-      throw new AppException('not_found', 'Jira configuration not found', HttpStatus.NOT_FOUND);
-    }
-    return this.jiraValidation.testConnection(
-      config.baseUrl,
-      config.projectKey,
-      config.tokenSecretRef,
-    );
   }
 
   /** Load a project in the acting tenant or 404 (RLS + explicit predicate). */

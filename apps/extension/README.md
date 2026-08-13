@@ -12,7 +12,7 @@ Three contexts (see `src/shared/messages.ts` for the typed protocol between them
   lifecycle, chunk upload, screenshots, and timers. Non-persistent; rehydrates an
   in-flight session from `chrome.storage.local` when woken.
 - `src/popup/` (UI only): sign-in, forced first-login password change, session
-  start (project + Jira/description + screenshot override), and the active
+  start (project + required description + screenshot override), and the active
   recording view with a stop button. Issues commands to the worker; renders state.
 - `src/content/recorder.ts` (in-page): runs rrweb (source of truth) with masking
   on by default, resolves selectors for the flag hotkey, batches events to the

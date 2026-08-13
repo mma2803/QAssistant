@@ -97,23 +97,22 @@ export async function getActive(): Promise<{
 export interface StartArgs {
   project: Project;
   projectId: string;
-  jiraId?: string;
   description?: string;
   screenshotEnabled?: boolean;
 }
 
 /**
- * Start a session: call POST /sessions (which authorizes the project, validates
- * Jira live when jiraId is present, freezes context, mints the session). On
- * success, persist state, instruct the content recorder to begin, and start the
- * flush/screenshot/inactivity timers.
+ * Start a session: call POST /sessions (which authorizes the project, freezes
+ * context, mints the session). On success, persist state, instruct the content
+ * recorder to begin, and start the flush/screenshot/inactivity timers.
  */
 export async function start(args: StartArgs): Promise<Session> {
   const screenshotEnabled = resolveScreenshot(args.project, args.screenshotEnabled);
   const session = await startSession({
     projectId: args.projectId,
-    jiraId: args.jiraId,
-    description: args.description,
+    // Server enforces a non-empty work-context description; forward what the
+    // popup collected (empty string when absent lets the server gate reject it).
+    description: args.description ?? '',
     screenshotEnabled,
   });
 
@@ -437,10 +436,7 @@ export async function rehydrate(projectLookup: (id: string) => Promise<Project |
     tenantId: persisted.tenantId,
     projectId: persisted.projectId,
     recordedBy: '',
-    jiraId: null,
-    jiraSummary: null,
-    jiraStatus: null,
-    description: null,
+    description: '',
     screenshotEnabled: persisted.screenshotEnabled,
     status: 'active',
     closeReason: null,

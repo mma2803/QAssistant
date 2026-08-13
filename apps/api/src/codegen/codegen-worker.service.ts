@@ -9,18 +9,11 @@ import {
   flags,
   generatedTests,
   generationComments,
-  jiraConfigs,
   projects,
   sessions,
 } from '../db/schema.js';
 import { newId } from '../db/id.js';
 import { GCS_READER, decodeArtifactText, type GcsReader } from '../storage/gcs-reader.service.js';
-import { SECRET_MANAGER, type SecretManager } from '../secrets/secret-manager.service.js';
-import {
-  JIRA_CLIENT,
-  type JiraClient,
-  type JiraIssueContext,
-} from '../jira/jira-client.service.js';
 import { GEMINI_CLIENT, type GeminiClient } from './gemini.service.js';
 import { buildPrompt, type LabeledSource } from './prompt-builder.js';
 
@@ -38,7 +31,6 @@ import { buildPrompt, type LabeledSource } from './prompt-builder.js';
  *
  * Grounding (spec "Context-grounded Playwright generation"):
  *   - recording DOM-replay chunks (from GCS),
- *   - Jira ticket + comments/attachments when the session is Jira-linked,
  *   - tester description,
  *   - project knowledge hub markdown + default-creds reference (labeled, never
  *     the secret value),
@@ -55,8 +47,6 @@ export class CodegenWorkerService {
   constructor(
     private readonly db: DbService,
     @Inject(GCS_READER) private readonly reader: GcsReader,
-    @Inject(SECRET_MANAGER) private readonly secrets: SecretManager,
-    @Inject(JIRA_CLIENT) private readonly jira: JiraClient,
     @Inject(GEMINI_CLIENT) private readonly gemini: GeminiClient,
   ) {}
 
@@ -125,12 +115,12 @@ export class CodegenWorkerService {
         });
       } else {
         // 6.5 fallback: no traffic captured. Label the gap so the model grounds
-        // the API test in Jira/description/knowledge instead, and reviewers know
+        // the API test in the description/knowledge instead, and reviewers know
         // it is weakly grounded.
         sources.push({
           label: 'recording.network.absent',
           kind: 'recording',
-          text: 'No HTTP traffic was captured for this session. Generate the API test from the Jira ticket, tester description, and project knowledge instead; this test is weakly grounded and should be reviewed carefully.',
+          text: 'No HTTP traffic was captured for this session. Generate the API test from the tester description and project knowledge instead; this test is weakly grounded and should be reviewed carefully.',
           note: 'no network_log captured; backend test weakly grounded',
         });
       }
@@ -164,20 +154,7 @@ export class CodegenWorkerService {
       });
     }
 
-    // 3. Jira ticket + comments/attachments when present.
-    if (session.jiraId) {
-      const jiraText = await this.loadJiraContext(db, payload, session);
-      if (jiraText) {
-        sources.push({
-          label: 'jira.ticket',
-          kind: 'jira',
-          text: jiraText,
-          note: 'linked Jira ticket summary/status/description/comments/attachments',
-        });
-      }
-    }
-
-    // 4. Tester description (frozen work context).
+    // 3. Tester description (frozen work context).
     if (session.description) {
       sources.push({ label: 'tester.description', kind: 'description', text: session.description });
     }
@@ -344,58 +321,6 @@ export class CodegenWorkerService {
       }
     }
     return calls.join('\n\n');
-  }
-
-  /** Load Jira description/comments/attachments for a Jira-linked session. */
-  private async loadJiraContext(
-    db: Database,
-    payload: GenerateTaskPayload,
-    session: typeof sessions.$inferSelect,
-  ): Promise<string> {
-    const head = [
-      session.jiraId ? `Key: ${session.jiraId}` : '',
-      session.jiraSummary ? `Summary: ${session.jiraSummary}` : '',
-      session.jiraStatus ? `Status: ${session.jiraStatus}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const cfgRows = await db
-      .select()
-      .from(jiraConfigs)
-      .where(
-        and(
-          eq(jiraConfigs.tenantId, payload.tenantId),
-          eq(jiraConfigs.projectId, payload.projectId),
-        ),
-      )
-      .limit(1);
-    const cfg = cfgRows[0];
-    if (!cfg || cfg.status !== 'active' || !session.jiraId) {
-      return head;
-    }
-
-    let ctx: JiraIssueContext = { description: '', comments: [], attachmentNames: [] };
-    try {
-      const token = await this.secrets.getSecret(cfg.tokenSecretRef);
-      ctx = await this.jira.getIssueContext({
-        baseUrl: cfg.baseUrl,
-        token,
-        issueKey: session.jiraId,
-      });
-    } catch {
-      // Best-effort: fall back to the frozen snapshot (head) only.
-    }
-
-    const body = [
-      head,
-      ctx.description ? `Description: ${ctx.description}` : '',
-      ctx.comments.length ? `Comments:\n${ctx.comments.map((c) => `- ${c}`).join('\n')}` : '',
-      ctx.attachmentNames.length ? `Attachments: ${ctx.attachmentNames.join(', ')}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-    return body;
   }
 
   private async loadSession(

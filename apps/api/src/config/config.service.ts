@@ -57,9 +57,6 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
 
-  // Jira: 'local' uses an in-memory fixture client; 'http' calls the live REST API.
-  JIRA_DRIVER: z.enum(['local', 'http']).default('local'),
-
   // Shared secret guarding internal worker endpoints (inactivity / purge) in
   // local/dev, and the Cloud-Tasks-worker-endpoint compatibility path.
   INTERNAL_TASK_TOKEN: z.string().default('local-internal-task-token'),

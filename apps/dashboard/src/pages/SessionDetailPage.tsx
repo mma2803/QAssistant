@@ -152,9 +152,6 @@ export function SessionDetailPage(): JSX.Element {
           </Meta>
           <Meta label={t('sessionDetail.started')}>{formatDateTime(session.startedAt)}</Meta>
           <Meta label={t('sessionDetail.duration')}>{formatDuration(durationSeconds)}</Meta>
-          {session.jiraId && (
-            <Meta label={t('sessionDetail.jira')}>{`${session.jiraId} (${session.jiraStatus ?? '?'})`}</Meta>
-          )}
         </CardContent>
       </Card>
 

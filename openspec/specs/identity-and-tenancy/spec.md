@@ -15,7 +15,7 @@ The system SHALL model each client/account as an isolated tenant in its own Post
 - **THEN** the system denies the request
 
 ### Requirement: Tenant-owned projects
-The system SHALL allow each tenant to own multiple projects, where a project is the unit for optional Jira configuration, app context, capture sessions, artifacts, and code generation.
+The system SHALL allow each tenant to own multiple projects, where a project is the unit for app context, capture sessions, artifacts, and code generation.
 
 #### Scenario: Admin creates a project inside a tenant
 - **WHEN** a tenant admin creates a project

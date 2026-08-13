@@ -4,59 +4,29 @@
 TBD - created by archiving change qassistant-mvp. Update Purpose after archive.
 ## Requirements
 ### Requirement: Work-context-gated session start
-The system SHALL require a selected project and work context before any capture begins. Work context SHALL be either a Jira ID validated live against the selected project's optional Jira configuration, or a tester-written description of what is being tested. Projects without Jira are allowed and support description-based sessions.
+The system SHALL require a selected project and work context before any capture
+begins. Work context SHALL be a required tester-written description of what is
+being tested. A session SHALL NOT start with an empty description.
 
-#### Scenario: Valid project-matched Jira ID starts a session
-- **WHEN** a tester enters a Jira ID that exists in Jira and clicks start
-- **THEN** the system validates the ticket through the selected project's Jira configuration, confirms the ticket belongs to the selected project's allowed Jira project key, records its metadata, mints a session, and begins capture
-
-#### Scenario: Description starts a non-Jira session
-- **WHEN** a tester selects a project, leaves Jira ID empty, and provides a testing description
-- **THEN** the system records the description, mints a session without a Jira ID, and begins capture
-
-#### Scenario: Project without Jira starts a description session
-- **WHEN** a tester selects a project with no Jira configuration and provides a testing description
-- **THEN** the system records the description, mints a session without a Jira ID, and begins capture
-
-#### Scenario: Jira ID on project without Jira blocks the session
-- **WHEN** a tester selects a project with no Jira configuration and provides a Jira ID
-- **THEN** the system blocks the Jira-based session start and allows the tester to remove the Jira ID and use a non-empty description instead
+#### Scenario: Description starts a session
+- **WHEN** a tester selects a project and provides a non-empty testing description and clicks start
+- **THEN** the system records the description, mints a session, and begins capture
 
 #### Scenario: Any non-empty description is accepted
-- **WHEN** a tester starts a non-Jira session with any non-empty description
+- **WHEN** a tester starts a session with any non-empty description
 - **THEN** the system accepts the description without requiring a minimum length or structured fields
 
-#### Scenario: No Jira and no description blocks the session
-- **WHEN** a tester selects a project but provides neither a Jira ID nor a testing description
-- **THEN** the system blocks the session start and no capture occurs
-
-#### Scenario: Invalid Jira ID blocks the session
-- **WHEN** a tester enters a Jira ID that does not exist
-- **THEN** the system blocks the session start and reports the error, and no capture occurs
-
-#### Scenario: Jira outage blocks Jira session
-- **WHEN** a tester provides a Jira ID but Jira cannot be reached or the project Jira token fails
-- **THEN** the system blocks the Jira-based session start and allows the tester to remove the Jira ID and use a non-empty description instead
-
-#### Scenario: Jira token manually replaced
-- **WHEN** a project admin replaces the Jira API token
-- **THEN** the system overwrites the stored encrypted-secrets-store value used for future Jira validation
-
-#### Scenario: Jira token uses read-only context permissions
-- **WHEN** a project admin configures a Jira API token
-- **THEN** the system expects read access to issue metadata, issue description, comments, and attachments, and does not require write, transition, or comment-posting permissions
-
-#### Scenario: Wrong Jira project blocks the session
-- **WHEN** a tester enters a Jira ID that exists but belongs to a different Jira project key than the selected project allows
+#### Scenario: Empty description blocks the session
+- **WHEN** a tester selects a project but provides no testing description (empty or whitespace-only)
 - **THEN** the system blocks the session start and no capture occurs
 
 #### Scenario: No project blocks the session
 - **WHEN** a tester attempts to start capture without selecting a project
-- **THEN** the system blocks the session start before Jira validation and no capture occurs
+- **THEN** the system blocks the session start and no capture occurs
 
 #### Scenario: Work context frozen for the session
 - **WHEN** a session is in progress
-- **THEN** the system does not allow the session's project, Jira ID, or testing description to be changed
+- **THEN** the system does not allow the session's project or testing description to be changed
 
 #### Scenario: Tester explicitly stops a session
 - **WHEN** a tester presses the stop button in the extension
@@ -105,7 +75,7 @@ The system SHALL mask sensitive DOM data by default before upload, including pas
 - **THEN** the system treats screenshots as sensitive full-image artifacts and does not claim they are fully redacted
 
 ### Requirement: Server-derived identity stamping
-The system SHALL stamp every captured event and artifact with `tenantId`, `projectId`, `uid`, `sessionId`, and optional `jiraId`, deriving `tenantId` and `uid` from the verified ID token and authorizing `projectId` server-side before persistence.
+The system SHALL stamp every captured event and artifact with `tenantId`, `projectId`, `uid`, and `sessionId`, deriving `tenantId` and `uid` from the verified ID token and authorizing `projectId` server-side before persistence.
 
 #### Scenario: Identity derived from token
 - **WHEN** the extension submits captured events with a client-asserted tenant or user value
@@ -117,7 +87,7 @@ The system SHALL stamp every captured event and artifact with `tenantId`, `proje
 
 #### Scenario: Complete stamping
 - **WHEN** an event or artifact is persisted
-- **THEN** it carries `tenantId`, `projectId`, `uid`, `sessionId`, and `jiraId` when the session has one
+- **THEN** it carries `tenantId`, `projectId`, `uid`, and `sessionId`
 
 ### Requirement: Hotkey to flag important state
 The system SHALL let the tester use a hotkey during capture to flag a selector or state as important, recording the flag for use by code generation.
@@ -157,7 +127,7 @@ The system SHALL capture the HTTP request/response traffic the recorded page mak
 
 #### Scenario: Network logs stamped and namespaced like other artifacts
 - **WHEN** a `network_log` artifact is persisted
-- **THEN** it carries `tenantId`, `projectId`, `uid`, `sessionId` (and `jiraId` when present) and is uploaded under the session's tenant/project/session-namespaced GCS path using the scoped write-only credential
+- **THEN** it carries `tenantId`, `projectId`, `uid`, `sessionId` and is uploaded under the session's tenant/project/session-namespaced GCS path using the scoped write-only credential
 
 #### Scenario: Network logs deleted with the session
 - **WHEN** a session is soft-deleted

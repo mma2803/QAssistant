@@ -43,7 +43,7 @@ This is a deliberate reinterpretation of the prior "SHALL NOT store secrets in P
 - **THEN** the artifact is written to MinIO under a tenant/project/session-namespaced path via a presigned upload URL
 
 #### Scenario: Project credentials encrypted at rest
-- **WHEN** a project's default credentials or a Jira token are saved
+- **WHEN** a project's default credentials are saved
 - **THEN** the value is AES-256-GCM-encrypted and stored in the `encrypted_secrets` table, and only an opaque reference is kept on the owning row; the encryption key is never stored in Postgres
 
 #### Scenario: Gemini API key stored as a platform secret

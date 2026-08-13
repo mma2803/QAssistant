@@ -4,7 +4,7 @@
 TBD - created by archiving change qassistant-mvp. Update Purpose after archive.
 ## Requirements
 ### Requirement: Per-project knowledge hub
-The system SHALL let an admin maintain a per-project knowledge hub, edited in the dashboard, containing a markdown overview of how the app works and an optional reference to default credentials (such as test account logins or API tokens needed during testing), stored in the encrypted secrets store and surfaced as labeled text context during code generation. The knowledge hub is optional: code generation MAY proceed when the hub is empty, using only recording and Jira or description context. A newly created project SHALL have its knowledge hub markdown initialized with a default, editable test-generation guidance template, and existing projects whose knowledge hub markdown is null or blank SHALL be backfilled with the same template. The template is guidance surfaced as labeled input context and SHALL NOT override the generator's platform rules; an admin MAY edit or clear it like any knowledge hub content.
+The system SHALL let an admin maintain a per-project knowledge hub, edited in the dashboard, containing a markdown overview of how the app works and an optional reference to default credentials (such as test account logins or API tokens needed during testing), stored in the encrypted secrets store and surfaced as labeled text context during code generation. The knowledge hub is optional: code generation MAY proceed when the hub is empty, using only recording and description context. A newly created project SHALL have its knowledge hub markdown initialized with a default, editable test-generation guidance template, and existing projects whose knowledge hub markdown is null or blank SHALL be backfilled with the same template. The template is guidance surfaced as labeled input context and SHALL NOT override the generator's platform rules; an admin MAY edit or clear it like any knowledge hub content.
 
 #### Scenario: Admin edits project context
 - **WHEN** an admin saves the project's markdown overview and default-credentials reference in the dashboard
@@ -12,7 +12,7 @@ The system SHALL let an admin maintain a per-project knowledge hub, edited in th
 
 #### Scenario: Code generation proceeds with empty knowledge hub
 - **WHEN** a user requests code generation for a session in a project whose knowledge hub has no markdown and no credentials reference
-- **THEN** the system generates using recording, Jira context (when present), and tester description only, without blocking on the missing hub content
+- **THEN** the system generates using recording and tester description only, without blocking on the missing hub content
 
 #### Scenario: New project seeded with the default template
 - **WHEN** a project is created
@@ -38,7 +38,7 @@ The system SHALL route generation tasks by tier: a Flash-tier model for summarie
 - **THEN** the system uses the configured Gemini 3 Pro model
 
 ### Requirement: Codegen safety and review
-The system SHALL treat captured DOM, screenshots, Jira text/comments/attachments, user comments, and project markdown as untrusted input for generation and SHALL store generated tests as reviewable draft versions rather than automatically trusted code.
+The system SHALL treat captured DOM, screenshots, user comments, and project markdown as untrusted input for generation and SHALL store generated tests as reviewable draft versions rather than automatically trusted code.
 
 #### Scenario: Generated test requires review
 - **WHEN** the system generates a test
@@ -70,7 +70,7 @@ The system SHALL treat captured DOM, screenshots, Jira text/comments/attachments
 
 #### Scenario: Prompt input summary stored
 - **WHEN** a generated test version is created
-- **THEN** the system stores a summary of which labeled input sources were used, including recording data, Jira context when present, tester description when present, project knowledge, screenshots when used, and user comments when regenerating
+- **THEN** the system stores a summary of which labeled input sources were used, including recording data, tester description when present, project knowledge, screenshots when used, and user comments when regenerating
 
 #### Scenario: Known secrets redacted before model use
 - **WHEN** the generation pipeline prepares context for Gemini
@@ -84,11 +84,11 @@ The system SHALL allow a user to add comments on generated code and to regenerat
 - **THEN** the system produces a new version of the code that takes the comment into account
 
 ### Requirement: Context-grounded test generation
-The system SHALL generate asserted tests in the recording's selected test framework and language (Playwright with TypeScript by default) from the available session context, branching on the resolved test type. For a `ui` test it SHALL generate from the recording's DOM-replay flow; for a `backend` test it SHALL generate from the session's captured network traffic (the recorded HTTP request/response calls), emitting an API test that issues requests and asserts on response status, headers, and body rather than a UI flow. In both cases it SHALL infer assertions from the linked Jira ticket when present, Jira comments/attachments when available, the tester-written description, the project knowledge hub, the project markdown, optional screenshots (UI), and any tester-flagged states. The generated test SHALL follow robustness defaults: (1) after an action that changes an observable state (such as a quantity, total, count, selection, or a response field), it SHALL assert that resulting state — exact when the value is controlled by the test, and relative/directional, range, or format otherwise; (2) for UI tests it SHALL use resilient selectors in priority order test-id/data attributes, then accessible role with name/label/visible text, then CSS class as a last resort, and SHALL NOT use positional selectors (index, `nth-child`, `nth-of-type`) or auto-generated/hashed class selectors; (3) it SHALL target the project's base URL rather than hard-coding a full origin; (4) it SHALL prefer state relations and invariants over exact values for dynamic, generated, or time-dependent data; and (5) it SHALL NOT emit trivial assertions on structural containers, generic orchestrators, or on response fields that do not prove the test case. A tester-flagged state with an explicit expected value SHALL still be asserted exactly; the robustness defaults apply to everything the tester did not pin.
+The system SHALL generate asserted tests in the recording's selected test framework and language (Playwright with TypeScript by default) from the available session context, branching on the resolved test type. For a `ui` test it SHALL generate from the recording's DOM-replay flow; for a `backend` test it SHALL generate from the session's captured network traffic (the recorded HTTP request/response calls), emitting an API test that issues requests and asserts on response status, headers, and body rather than a UI flow. In both cases it SHALL infer assertions from the tester-written description, the project knowledge hub, the project markdown, optional screenshots (UI), and any tester-flagged states. The generated test SHALL follow robustness defaults: (1) after an action that changes an observable state (such as a quantity, total, count, selection, or a response field), it SHALL assert that resulting state — exact when the value is controlled by the test, and relative/directional, range, or format otherwise; (2) for UI tests it SHALL use resilient selectors in priority order test-id/data attributes, then accessible role with name/label/visible text, then CSS class as a last resort, and SHALL NOT use positional selectors (index, `nth-child`, `nth-of-type`) or auto-generated/hashed class selectors; (3) it SHALL target the project's base URL rather than hard-coding a full origin; (4) it SHALL prefer state relations and invariants over exact values for dynamic, generated, or time-dependent data; and (5) it SHALL NOT emit trivial assertions on structural containers, generic orchestrators, or on response fields that do not prove the test case. A tester-flagged state with an explicit expected value SHALL still be asserted exactly; the robustness defaults apply to everything the tester did not pin.
 
 #### Scenario: Generate code from a recording
 - **WHEN** a user requests code generation for a recording
-- **THEN** the system produces a versioned test in the selected framework and language, generated from the recording's DOM-replay flow (UI) or captured network traffic (backend) plus the available Jira ticket/comments/attachments or tester description and project context
+- **THEN** the system produces a versioned test in the selected framework and language, generated from the recording's DOM-replay flow (UI) or captured network traffic (backend) plus the tester description and project context
 
 #### Scenario: Backend test generated from captured network traffic
 - **WHEN** a user requests generation with the test type resolved to `backend`

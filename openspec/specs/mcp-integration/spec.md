@@ -39,7 +39,7 @@ scope. Tool calls made before successful authentication SHALL be rejected.
 The MCP server SHALL provide a `list_records` tool returning the authenticated
 tenant's sessions (with optional filters such as status and project) and a
 `get_record(sessionId)` tool returning a single session with its full content:
-DOM-replay reference, screenshots, generated code versions, flags, and Jira or
+DOM-replay reference, screenshots, generated code versions, flags, and
 description context.
 
 #### Scenario: List records for the tenant

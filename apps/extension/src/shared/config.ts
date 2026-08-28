@@ -7,10 +7,10 @@
 
 export const config = {
   tenantSlug: import.meta.env.VITE_DEFAULT_TENANT_SLUG ?? '',
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'https://135-181-104-90.sslip.io',
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'https://qassistant.app',
 } as const;
 
-/** Full REST base, e.g. "https://135-181-104-90.sslip.io/api/v1". */
+/** Full REST base, e.g. "https://qassistant.app/api/v1". */
 export function apiBase(): string {
   return `${config.apiBaseUrl.replace(/\/$/, '')}/api/v1`;
 }

@@ -10,6 +10,9 @@ concurrency:
 
 jobs:
   build-and-push:
+    # Ne tourne pas sur le miroir public (aucun secret serveur). Sur le repo
+    # public les jobs sont ignorés (skipped), donc pas d'échec rouge.
+    if: ${{ github.repository != 'mma2803/QAssistant' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,6 +59,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
+    if: ${{ github.repository != 'mma2803/QAssistant' }}
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: production

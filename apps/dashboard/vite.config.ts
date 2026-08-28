@@ -14,7 +14,7 @@ import tailwindcss from '@tailwindcss/vite';
  */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const proxyTarget = env.VITE_API_PROXY_TARGET || 'https://135-181-104-90.sslip.io';
+  const proxyTarget = env.VITE_API_PROXY_TARGET || 'https://qassistant.app';
   return {
     plugins: [react(), tailwindcss()],
     resolve: {

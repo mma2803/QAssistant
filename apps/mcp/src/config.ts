@@ -7,7 +7,7 @@
 export interface McpConfig {
   /**
    * Base URL of the QAssistant REST API, INCLUDING the global prefix, e.g.
-   * https://135-181-104-90.sslip.io/api/v1. The API mounts every route under /api/v1
+   * https://qassistant.app/api/v1. The API mounts every route under /api/v1
    * (see apps/api setGlobalPrefix), so the prefix must be present here.
    */
   apiBaseUrl: string;
@@ -15,7 +15,7 @@ export interface McpConfig {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): McpConfig {
   // Default to the remote VPS deployment; QASSISTANT_API_URL overrides it.
-  const raw = (env.QASSISTANT_API_URL ?? 'https://135-181-104-90.sslip.io').replace(/\/$/, '');
+  const raw = (env.QASSISTANT_API_URL ?? 'https://qassistant.app').replace(/\/$/, '');
   // The API serves everything under /api/v1. If the configured URL doesn't
   // already include a path segment beyond the host, append the prefix so tool
   // calls hit /api/v1/... instead of 404ing at the bare host.

@@ -43,7 +43,7 @@ the menu — so even without picking a prompt, Claude walks you through it.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `QASSISTANT_API_URL` | `https://135-181-104-90.sslip.io` | Base URL of the QAssistant API. Defaults to the hosted VPS deployment. The `/api/v1` global prefix is appended automatically when the URL is host-only; pass a URL that already includes a path to override. Set to `http://localhost:8080` only to target a local backend. |
+| `QASSISTANT_API_URL` | `https://qassistant.app` | Base URL of the QAssistant API. Defaults to the hosted VPS deployment. The `/api/v1` global prefix is appended automatically when the URL is host-only; pass a URL that already includes a path to override. Set to `http://localhost:8080` only to target a local backend. |
 
 ## Build & run
 
@@ -58,7 +58,7 @@ Against the hosted VPS (default — `QASSISTANT_API_URL` may be omitted):
 
 ```bash
 claude mcp add qassistant \
-  --env QASSISTANT_API_URL=https://135-181-104-90.sslip.io \
+  --env QASSISTANT_API_URL=https://qassistant.app \
   -- node /absolute/path/to/QAssistant/apps/mcp/dist/main.js
 ```
 
@@ -71,7 +71,7 @@ Equivalent `.mcp.json` / settings entry:
       "command": "node",
       "args": ["/absolute/path/to/QAssistant/apps/mcp/dist/main.js"],
       "env": {
-        "QASSISTANT_API_URL": "https://135-181-104-90.sslip.io"
+        "QASSISTANT_API_URL": "https://qassistant.app"
       }
     }
   }

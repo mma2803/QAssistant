@@ -1,80 +1,121 @@
-# QAssistant
+<div align="center">
 
-QAssistant turns manual QA testing into reusable automated tests. A tester runs
-through a scenario in their browser as usual; QAssistant records the real session (the
-page, the network calls, screenshots), and an AI turns that recording into an automated
-test (e.g. Playwright) the team can run again and again. A web dashboard gives each
-organisation a clear, role-scoped view of its recordings, generated tests, and activity.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/qa-managers/images/logo-dark.svg">
+  <img src="docs/qa-managers/images/logo.svg" alt="QAssistant" width="320">
+</picture>
 
-> **QA manager?** For the benefit-first product tour, see
-> [`docs/qa-managers/README.md`](docs/qa-managers/README.md).
-
-## How it works
-
-1. **Record.** A tester picks a project, adds a short description of what they're testing,
-   and runs their scenario while a Chrome extension captures the session (DOM via rrweb,
-   network traffic, optional screenshots) and streams it to the backend.
-2. **Review & generate.** In the dashboard you open a recording and let the AI generate
-   an automated test from it, choosing the test type (UI or back-end), the framework, and
-   the language. Iterate with instructions until it's right, then approve the version you
-   want.
-3. **Integrate.** An MCP server exposes the approved tests to an AI coding client
-   (e.g. Claude Code), which adds the test to your repository and runs it. A test is
-   kept only if it actually passes.
-
-Everything is **multi-tenant**: each client is an isolated organisation, and data is
-separated per organisation at the database level (row-level security).
-
-## Cloud or Local?
-
-You can use QAssistant two ways. It's the same application; only *where it runs*
-differs. Pick whichever fits you:
-
-| | ☁️ QAssistant Cloud (hosted) | 💻 QAssistant Local (self-hosted) |
-|---|---|---|
-| **Best for** | Teams who just want to use it | Running it on your own infrastructure, or developing it |
-| **Setup** | Nothing to install: use a signup link to create your organisation, then sign in | Clone the repo, Docker + Node, run the stack yourself |
-| **Where your data lives** | On our server (the VPS) | On your own machine/server |
-| **AI test generation** | Ready out of the box | Works offline with a fake generator; set `GEMINI_API_KEY` for real generation |
-| **Updates & backups** | Handled for you (auto-deploy) | You update, deploy, and back up yourself |
-| **Chrome extension** | Load it into Chrome | Build it, then load it into Chrome |
-| **Upsides** | Ready in minutes, nothing to maintain, always up to date | Full control of your infra and data, works offline, no dependency on us |
-| **Trade-offs** | Data sits on our server; you depend on our hosted instance | You set up, maintain, and back it up; real AI generation needs your own Gemini key |
-
-**The Chrome extension** (used to record sessions) is installed the same way in both
-modes: build it, then load it into Chrome via `chrome://extensions` → Developer mode →
-Load unpacked → `apps/extension/dist`. There's no one-click Web Store install yet. The
-only difference is the backend the build targets: it defaults to the hosted instance
-(Cloud), or you set `VITE_API_BASE_URL` to your local API (Local). See
-[`apps/extension/README.md`](apps/extension/README.md).
+**Capitalisez sur les tests manuels de votre équipe, gagnez en couverture et pilotez la productivité de vos testeurs.**
 
 
-## QAssistant Cloud (hosted)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![NestJS](https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Playwright](https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
 
-The hosted instance runs on our server and is ready to use, at
-**https://135-181-104-90.sslip.io/**.
+</div>
 
-**Roles in your organisation.**
-- **Admin:** runs your organisation (projects, team members, recordings).
-- **QA engineer:** records sessions and reviews recordings and generated tests.
+## Le problème
 
-**Getting access.** There's no public self-signup: your organisation is set up by the
-platform operator, who sends you a **signup link**. Use it once to create your
-organisation and its first admin (name + email + password), then sign in with your
-**email**, **password**, and **organisation identifier** (a short slug). The first admin
-adds testers from the **Users** screen.
+<div align="center">
+<table>
+<tr>
+<td align="center" width="150"><img src="docs/qa-managers/images/emoji/clipboard.png" width="64" alt=""><br><b>Tests manuels</b></td>
+<td align="center" width="60"><img src="docs/qa-managers/images/emoji/arrow.png" width="32" alt="vers"></td>
+<td align="center" width="150"><img src="docs/qa-managers/images/emoji/repeat.png" width="64" alt=""><br><b>Répétés</b></td>
+<td align="center" width="60"><img src="docs/qa-managers/images/emoji/arrow.png" width="32" alt="vers"></td>
+<td align="center" width="150"><img src="docs/qa-managers/images/emoji/trash.png" width="64" alt=""><br><b>Perdus</b></td>
+</tr>
+</table>
+</div>
 
-Recording, reviewing, generating, and integrating then work as in
-[How it works](#how-it-works) above. The interface is in **English or French**, following
-your browser language (with a manual switch in the top bar).
+<div align="center">
 
-## QAssistant Local (run it yourself)
+❌ **Tests manuels répétés. Expertise perdue.**
 
-Run the whole stack on your own machine, to develop QAssistant or to try it without the
-hosted instance. It's an npm-workspaces monorepo, TypeScript throughout, Node 20+, backed
-by docker-compose.
+</div>
 
-Prerequisites: Node 20 (`.nvmrc`) and Docker.
+## La solution QAssistant
+
+QAssistant part d'un principe simple. Le test manuel de votre équipe ne doit pas se perdre,
+il faut **capitaliser sur** cet effort. Chaque session est capturée, puis transformée en test
+automatisé réutilisable, et vient enrichir une batterie de tests qui grandit à chaque
+campagne, sans budget dédié ni chantier d'automatisation à part.
+
+**Ce que vous y gagnez**
+
+- 🔄 **Un capital technique :** une batterie de tests automatisés qui s'enrichit à chaque campagne, sans budget dédié ni chantier à part.
+- 👁️ **Une visibilité en temps réel :** un suivi de l'activité et de la productivité de votre équipe.
+- 🛑 **Aucune difficulté perdue :** un blocage rencontré par un testeur est capturé dans la session, donc visible par le manager et rejouable à volonté.
+- 👥 **Un vrai pilotage :** une vue par rôle pour mesurer l'avancement et analyser les succès comme les échecs.
+
+## Aperçu
+
+Du parcours enregistré au test automatisé approuvé. Cliquez sur une image pour l'agrandir.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/qa-managers/images/02-recordings.png"><img src="docs/qa-managers/images/02-recordings.png" alt="Liste des enregistrements"></a>
+      <br><sub><b>Toutes les sessions enregistrées</b></sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/qa-managers/images/03-session-detail.png"><img src="docs/qa-managers/images/03-session-detail.png" alt="Détail d'une session"></a>
+      <br><sub><b>Détail d'une session : replay, captures, réseau, signalements</b></sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/qa-managers/images/04-generated-test.png"><img src="docs/qa-managers/images/04-generated-test.png" alt="Test automatisé généré"></a>
+      <br><sub><b>Test automatisé généré par l'IA</b></sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/qa-managers/images/01-overview.png"><img src="docs/qa-managers/images/01-overview.png" alt="Vue d'ensemble par rôle"></a>
+      <br><sub><b>Vue d'ensemble par rôle</b></sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <a href="docs/qa-managers/images/05-productivity.png"><img src="docs/qa-managers/images/05-productivity.png" alt="Page Productivité" width="49%"></a>
+      <br><sub><b>Page Productivité (managers)</b></sub>
+    </td>
+  </tr>
+</table>
+
+## Fonctionnement
+
+Le manager pose le cadre, le testeur capitalise sur son travail. Personne n'écrit de code.
+
+<img src="docs/qa-managers/images/icons/role-manager.png" width="22" align="top"> **Côté QA manager**
+
+- 📁 Crée le projet et son contexte
+- <img src="docs/qa-managers/images/icons/feat-dashboard.png" width="18" align="top"> Suit la productivité et l'activité de l'équipe
+
+<img src="docs/qa-managers/images/icons/role-tester.png" width="22" align="top"> **Côté testeur**
+
+- <img src="docs/qa-managers/images/icons/step-record.png" width="18" align="top"> Enregistre son scénario (DOM, réseau, captures, flags)
+- <img src="docs/qa-managers/images/icons/step-frame.png" width="18" align="top"> Cadre la génération (framework, langage, UI ou API)
+- <img src="docs/qa-managers/images/icons/step-ai.png" width="18" align="top"> Génère le test avec l'agent IA, régénère jusqu'à la bonne version
+- <img src="docs/qa-managers/images/icons/step-approve.png" width="18" align="top"> Approuve la version retenue
+- <img src="docs/qa-managers/images/icons/step-integrate.png" width="18" align="top"> Intègre au dépôt via MCP, seulement si le test s'exécute avec succès
+
+## Accès
+
+### En ligne (Cloud)
+
+QAssistant est **gratuit** et hébergé sur **https://qassistant.app/**. Contactez-moi et je vous envoie un **lien d'inscription
+personnalisé** pour créer votre organisation.
+
+### En local
+
+Pour développer QAssistant ou l'essayer sans l'instance hébergée. C'est un monorepo npm
+workspaces, en TypeScript de bout en bout, Node 20 et plus, adossé à docker-compose.
+
+Prérequis : Node 20 (`.nvmrc`) et Docker.
 
 ```bash
 npm install
@@ -83,72 +124,54 @@ cp .env.example .env
 # 1) Postgres + MinIO
 npm run dev:infra
 
-# 2) Load env into THIS shell (the app reads process.env directly; no dotenv).
-set -a; . ./.env; set +a          # or run each command with `node --env-file=.env`
+# 2) Charger l'env dans CE shell (l'app lit process.env directement, pas de dotenv).
+set -a; . ./.env; set +a          # ou lancez chaque commande avec `node --env-file=.env`
 
 # 3) Backend
 npm run db:migrate -w @qassistant/api
-npm run seed:super-admin -w @qassistant/api    # first super-admin (no UI path)
-npm run start:dev -w @qassistant/api           # API on http://127.0.0.1:8080 (/api/v1)
+npm run seed:super-admin -w @qassistant/api    # premier super-admin (aucun parcours UI)
+npm run start:dev -w @qassistant/api           # API sur http://127.0.0.1:8080 (/api/v1)
 
-# 4) Dashboard (new terminal; re-run the `set -a; . ./.env; set +a` line first)
+# 4) Dashboard (nouveau terminal, relancez d'abord la ligne `set -a; . ./.env; set +a`)
 VITE_API_PROXY_TARGET=http://127.0.0.1:8080 \
-  npm run dev -w @qassistant/dashboard         # http://localhost:5173, proxies /api to :8080
+  npm run dev -w @qassistant/dashboard         # http://localhost:5173, proxifie /api vers :8080
 
-# 5) Extension (Chrome MV3) — build it pointing at your LOCAL API, then load it.
-#    Without VITE_API_BASE_URL the build targets the hosted instance, not localhost.
+# 5) Extension (Chrome MV3). Compilez-la en visant votre API LOCALE, puis chargez-la.
+#    Sans VITE_API_BASE_URL, la compilation vise l'instance hébergée, pas localhost.
 VITE_API_BASE_URL=http://127.0.0.1:8080 npm run build -w @qassistant/extension
-# chrome://extensions -> Developer mode -> Load unpacked -> apps/extension/dist
+# chrome://extensions -> Mode développeur -> Charger l'extension non empaquetée -> apps/extension/dist
 ```
 
-The offline drivers (`STORAGE_DRIVER=local`, `SECRETS_DRIVER=local`,
-`CLOUD_TASKS_DRIVER=inline`, and a fake AI client when `GEMINI_API_KEY` is empty) need
-nothing beyond Postgres. Per-app notes: [`apps/api`](apps/api/README.md),
-[`apps/dashboard`](apps/dashboard/README.md), [`apps/extension`](apps/extension/README.md),
-[`apps/mcp`](apps/mcp/README.md).
+Les drivers hors ligne (`STORAGE_DRIVER=local`, `SECRETS_DRIVER=local`,
+`CLOUD_TASKS_DRIVER=inline`, et un client IA factice quand `GEMINI_API_KEY` est vide) n'ont
+besoin de rien d'autre que Postgres. Notes par application :
+[`apps/api`](apps/api/README.md), [`apps/dashboard`](apps/dashboard/README.md),
+[`apps/extension`](apps/extension/README.md), [`apps/mcp`](apps/mcp/README.md).
 
-Run the full end-to-end gate (Postgres + MinIO + Playwright + the HTTP/RLS suites) with:
-
-```bash
-npm run test:e2e            # backend-only tests: npm test -w @qassistant/api
-```
-
-## Self-hosting your own instance
-
-To stand up your own production instance (this is how QAssistant Cloud itself is
-deployed), see [`infra/`](infra/): `infra/vps/bootstrap.sh` provisions a blank VPS and
-`.github/workflows/deploy.yml` deploys on every push to `main`. The operator of an
-instance is its **super-admin** (seeded with `npm run seed:super-admin`), who creates
-organisations and issues the signup links that onboard each client.
-
-## Repo layout
+## Structure du dépôt
 
 ```text
-apps/api/          NestJS backend API (Drizzle + PostgreSQL row-level security)
-apps/dashboard/    React + Vite dashboard (the web app you sign in to)
-apps/extension/    Chrome MV3 extension (rrweb capture) used to record sessions
-apps/mcp/          MCP server: exposes recordings + generated tests to AI clients,
-                   records integration outcomes (never pushes to Git itself)
-packages/shared/   Shared zod schemas, enums, and TypeScript types
-infra/             Dockerfiles, Caddyfile, docker-compose, and VPS bootstrap/deploy/backup
-openspec/          Specifications, design, and change history (source of truth)
-docs/              Privacy posture, QA-manager tour, and capture/replay notes
+apps/api/          API back-end NestJS (Drizzle + PostgreSQL row-level security)
+apps/dashboard/    Tableau de bord React + Vite (l'app web où vous vous connectez)
+apps/extension/    Extension Chrome MV3 (capture rrweb) utilisée pour enregistrer les sessions
+apps/mcp/          Serveur MCP : expose les enregistrements et les tests générés aux clients IA,
+                   consigne les résultats d'intégration (ne pousse jamais sur Git lui-même)
+packages/shared/   Schémas zod, enums et types TypeScript partagés
+infra/             Dockerfiles, Caddyfile, docker-compose, et bootstrap/deploy/backup du VPS
+openspec/          Spécifications, conception et historique des changements (source de vérité)
+docs/              Politique de confidentialité et notes de capture/replay
 ```
 
-## How it's built
+## Architecture
 
-- **TypeScript** across the API, dashboard, extension, and shared schemas.
-- **PostgreSQL** (self-hosted) with **row-level security** keyed off the verified
-  `tenantId` as the tenant-isolation floor; **MinIO** (S3-compatible) for artifacts.
-- **Self-hosted email/password auth**: opaque, DB-backed bearer tokens (argon2id
-  hashing, 2h access / 30d rotated refresh, instant revocation). Accounts are created by
-  a super-admin or admin (directly or via a signup link), so there is no *open*
-  self-registration. Passwords require upper/lower/digit/special, min 8 characters.
-- **AI codegen** via the Gemini Developer API (key from the server's `.env`), run through
-  a Postgres-backed job queue with an in-process worker (no Redis). Test **integration**
-  into your repo is done by an AI client over the MCP server.
-- **Infrastructure**: Docker Compose on a single VPS, Caddy reverse proxy with automatic
-  HTTPS, GitHub Actions CI/CD.
+Monorepo **TypeScript** de bout en bout (API, dashboard, extension, schémas partagés).
 
-For what is captured, masking, retention, and deletion, see
+- **Back-end** NestJS et **PostgreSQL** avec **row-level security** par `tenantId` pour isoler chaque organisation. Artefacts sur **MinIO** (S3).
+- **Auth** maison email et mot de passe : jetons opaques en base (argon2id), accès 2 h et refresh 30 j révocables, pas d'inscription libre.
+- **Génération de tests** via l'API **Gemini**, file de jobs sur Postgres avec worker in-process (pas de Redis). Intégration au dépôt confiée à un client IA via **MCP**.
+- **Infra** : Docker Compose sur un VPS, reverse proxy **Caddy** avec HTTPS automatique, **CI/CD GitHub Actions**.
+
+## Confidentialité
+
+Pour ce qui est capturé, le masquage, la conservation et la suppression, voyez
 [`docs/PRIVACY.md`](docs/PRIVACY.md).

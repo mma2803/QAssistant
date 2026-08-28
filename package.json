@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "QAssistant: multi-tenant QA capture and codegen SaaS (monorepo root).",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=20"
   },
